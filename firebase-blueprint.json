@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "Siswa": {
+      "title": "Siswa",
+      "description": "Data peserta didik di sekolah",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nisn": { "type": "string", "maxLength": 20 },
+        "nama": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "jenisKelamin": { "type": "string", "enum": ["L", "P"] },
+        "noHpOrtu": { "type": "string", "maxLength": 30 },
+        "alamat": { "type": "string", "maxLength": 255 },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "nisn", "nama", "kelas", "jenisKelamin", "userId"]
+    },
+    "Mapel": {
+      "title": "Mapel",
+      "description": "Data mata pelajaran yang diampu",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "kode": { "type": "string", "maxLength": 20 },
+        "nama": { "type": "string", "maxLength": 100 },
+        "tingkat": { "type": "string", "maxLength": 50 },
+        "jamPerMinggu": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "kode", "nama", "userId"]
+    },
+    "Jadwal": {
+      "title": "Jadwal",
+      "description": "Jadwal mengajar mingguan guru",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "hari": { "type": "string", "enum": ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"] },
+        "jamKe": { "type": "string", "maxLength": 20 },
+        "mapelId": { "type": "string" },
+        "namaMapel": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "hari", "jamKe", "mapelId", "namaMapel", "kelas", "userId"]
+    },
+    "Absensi": {
+      "title": "Absensi",
+      "description": "Catatan presensi harian siswa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string", "maxLength": 20 },
+        "siswaId": { "type": "string" },
+        "namaSiswa": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["H", "S", "I", "A"] },
+        "catatan": { "type": "string", "maxLength": 255 },
+        "timestamp": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "siswaId", "namaSiswa", "kelas", "status", "userId"]
+    },
+    "Nilai": {
+      "title": "Nilai",
+      "description": "Asesmen formatif dan sumatif siswa",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "siswaId": { "type": "string" },
+        "namaSiswa": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "mapelId": { "type": "string" },
+        "jenis": { "type": "string", "enum": ["formatif", "sumatif", "pas"] },
+        "skor": { "type": "number" },
+        "materi": { "type": "string", "maxLength": 150 },
+        "semester": { "type": "string", "maxLength": 20 },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "siswaId", "namaSiswa", "kelas", "mapelId", "jenis", "skor", "userId"]
+    },
+    "Agenda": {
+      "title": "Agenda",
+      "description": "Jurnal agenda harian guru mengajar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string", "maxLength": 20 },
+        "jamKe": { "type": "string", "maxLength": 20 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "mapel": { "type": "string", "maxLength": 100 },
+        "materi": { "type": "string", "maxLength": 255 },
+        "kegiatan": { "type": "string", "maxLength": 1000 },
+        "kendala": { "type": "string", "maxLength": 500 },
+        "refleksi": { "type": "string", "maxLength": 500 },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "jamKe", "kelas", "mapel", "materi", "userId"]
+    },
+    "Bimbingan": {
+      "title": "Bimbingan",
+      "description": "Catatan bimbingan dan konseling wali kelas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tanggal": { "type": "string", "maxLength": 20 },
+        "siswaId": { "type": "string" },
+        "namaSiswa": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "catatanKasus": { "type": "string", "maxLength": 1000 },
+        "tindakLanjut": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Proses", "Selesai"] },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "tanggal", "siswaId", "namaSiswa", "kelas", "catatanKasus", "status", "userId"]
+    },
+    "Pengaturan": {
+      "title": "Pengaturan",
+      "description": "Konfigurasi identitas guru, sekolah dan sistem",
+      "type": "object",
+      "properties": {
+        "namaGuru": { "type": "string", "maxLength": 100 },
+        "nipGuru": { "type": "string", "maxLength": 50 },
+        "mapelUtama": { "type": "string", "maxLength": 100 },
+        "namaSekolah": { "type": "string", "maxLength": 150 },
+        "dinasPendidikan": { "type": "string", "maxLength": 150 },
+        "alamatSekolah": { "type": "string", "maxLength": 255 },
+        "noTelpSekolah": { "type": "string", "maxLength": 50 },
+        "namaKepsek": { "type": "string", "maxLength": 100 },
+        "nipKepsek": { "type": "string", "maxLength": 50 },
+        "kota": { "type": "string", "maxLength": 50 },
+        "logoDinasUrl": { "type": "string", "maxLength": 500 },
+        "logoSekolahUrl": { "type": "string", "maxLength": 500 },
+        "username": { "type": "string", "maxLength": 100 },
+        "password": { "type": "string", "maxLength": 100 },
+        "userId": { "type": "string" }
+      },
+      "required": ["namaGuru", "namaSekolah", "namaKepsek", "userId"]
+    }
+  },
+  "firestore": {
+    "/siswa/{siswaId}": {
+      "schema": { "$ref": "#/entities/Siswa" },
+      "description": "Koleksi data siswa per guru"
+    },
+    "/mapel/{mapelId}": {
+      "schema": { "$ref": "#/entities/Mapel" },
+      "description": "Koleksi data mata pelajaran"
+    },
+    "/jadwal/{jadwalId}": {
+      "schema": { "$ref": "#/entities/Jadwal" },
+      "description": "Koleksi jadwal mengajar mingguan"
+    },
+    "/absensi/{absensiId}": {
+      "schema": { "$ref": "#/entities/Absensi" },
+      "description": "Koleksi presensi siswa harian"
+    },
+    "/nilai/{nilaiId}": {
+      "schema": { "$ref": "#/entities/Nilai" },
+      "description": "Koleksi nilai formatif dan sumatif"
+    },
+    "/agenda/{agendaId}": {
+      "schema": { "$ref": "#/entities/Agenda" },
+      "description": "Koleksi jurnal agenda mengajar"
+    },
+    "/bimbingan/{bimbinganId}": {
+      "schema": { "$ref": "#/entities/Bimbingan" },
+      "description": "Koleksi rekam bimbingan konseling"
+    },
+    "/pengaturan/{userId}": {
+      "schema": { "$ref": "#/entities/Pengaturan" },
+      "description": "Koleksi pengaturan identitas per pengguna"
+    }
+  }
+}

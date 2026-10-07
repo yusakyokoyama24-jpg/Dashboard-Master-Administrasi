@@ -1,0 +1,10 @@
+{
+  "name": "MASTER ADMINISTRASI TONGGURU YUSAK YOKOYAMA",
+  "description": "Sistem Manajemen Administrasi Guru Digital Terpadu Kurikulum Merdeka, Presensi QR Scanner, dan Suite AI Deep Learning.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

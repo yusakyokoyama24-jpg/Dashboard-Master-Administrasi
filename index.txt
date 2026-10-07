@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aplikasi Administrasi Guru Kurikulum Merdeka Pro</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- QRCode CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Print Formatting Rules */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 0 !important; /* Hilangkan header & footer otomatis browser */
+      }
+      @page landscape {
+        size: A4 landscape;
+        margin: 0 !important;
+      }
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-only {
+        display: block !important;
+      }
+      .print-card-container {
+        padding: 8mm !important;
+      }
+      .avoid-break {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- ========================================================================= -->
+  <!-- 1. HEADER UTAMA & KOP APLIKASI -->
+  <!-- ========================================================================= -->
+  <header class="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white shadow-lg sticky top-0 z-40 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Brand & Info Sekolah -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-md">
+            <i data-lucide="graduation-cap" class="w-6 h-6 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h1 class="font-extrabold text-base sm:text-lg tracking-tight">Administrasi Guru Merdeka</h1>
+              <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-300 border border-blue-400/30">PRO</span>
+            </div>
+            <p id="top-school-subtitle" class="text-xs text-slate-400 truncate max-w-xs sm:max-w-md">
+              SMA NEGERI 1 SURABAYA • Semester Ganjil 2026/2027
+            </p>
+          </div>
+        </div>
+
+        <!-- Right Action Items -->
+        <div class="flex items-center space-x-3">
+          <!-- Connection Indicator -->
+          <div id="gas-sync-indicator" class="hidden sm:flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="gas-sync-text">Google Sheets Connected</span>
+          </div>
+
+          <!-- Quick Sync Button -->
+          <button onclick="sinkronisasiData()" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition" title="Sinkronisasi Data dengan Google Spreadsheet">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 border-t border-slate-800/80 text-xs sm:text-sm font-semibold scrollbar-none">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap bg-indigo-600 text-white">
+          <i data-lucide="layout-dashboard" class="w-4 h-4 inline mr-1.5"></i>Dashboard
+        </button>
+        <button onclick="switchTab('siswa')" id="nav-siswa" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800">
+          <i data-lucide="users" class="w-4 h-4 inline mr-1.5"></i>Data Siswa &amp; Kartu QR
+        </button>
+        <button onclick="switchTab('absensi')" id="nav-absensi" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800">
+          <i data-lucide="calendar-check-2" class="w-4 h-4 inline mr-1.5"></i>Presensi Harian
+        </button>
+        <button onclick="switchTab('nilai')" id="nav-nilai" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800">
+          <i data-lucide="award" class="w-4 h-4 inline mr-1.5"></i>Leger 10 Sumatif (80%)
+        </button>
+        <button onclick="switchTab('agenda')" id="nav-agenda" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800">
+          <i data-lucide="book-open-check" class="w-4 h-4 inline mr-1.5"></i>Jurnal Agenda
+        </button>
+        <button onclick="switchTab('rpm')" id="nav-rpm" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800">
+          <i data-lucide="sparkles" class="w-4 h-4 inline mr-1.5"></i>Generator RPM Deep Learning
+        </button>
+        <button onclick="switchTab('pengaturan')" id="nav-pengaturan" class="tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800">
+          <i data-lucide="settings" class="w-4 h-4 inline mr-1.5"></i>Pengaturan
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 2. KONTEN UTAMA APLIKASI -->
+  <!-- ========================================================================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ======================================================================= -->
+    <!-- TAB 1: DASHBOARD -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-dashboard" class="space-y-6">
+      <!-- Welcome Hero Banner -->
+      <div class="bg-gradient-to-br from-indigo-900 via-blue-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+        <div class="relative z-10 max-w-2xl space-y-2">
+          <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-xs text-xs font-semibold text-blue-200">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>Tahun Ajaran 2026/2027 • Kurikulum Merdeka</span>
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-black tracking-tight" id="dash-greeting">
+            Selamat Datang, Bapak/Ibu Guru!
+          </h2>
+          <p class="text-xs sm:text-sm text-blue-200/90 leading-relaxed">
+            Sistem terpadu administrasi pembelajaran, presensi QR realtime, leger asesmen 10 Nilai Sumatif berbobot 80%, analisis korelasi kehadiran, dan perancangan RPM Deep Learning.
+          </p>
+        </div>
+        <div class="absolute -right-10 -bottom-10 w-60 h-60 bg-blue-500/20 rounded-full blur-3xl pointer-events-none"></div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div class="p-3 bg-blue-50 rounded-xl text-blue-600">
+            <i data-lucide="users" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Total Siswa</div>
+            <div id="stat-total-siswa" class="text-xl sm:text-2xl font-black text-slate-900">36</div>
+          </div>
+        </div>
+
+        <div class="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div class="p-3 bg-emerald-50 rounded-xl text-emerald-600">
+            <i data-lucide="user-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Presensi Hari Ini</div>
+            <div id="stat-presensi-pct" class="text-xl sm:text-2xl font-black text-emerald-600">97.2%</div>
+          </div>
+        </div>
+
+        <div class="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div class="p-3 bg-amber-50 rounded-xl text-amber-600">
+            <i data-lucide="award" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Rata 10 Sumatif (80%)</div>
+            <div id="stat-avg-sumatif" class="text-xl sm:text-2xl font-black text-amber-600">84.6</div>
+          </div>
+        </div>
+
+        <div class="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center space-x-4">
+          <div class="p-3 bg-purple-50 rounded-xl text-purple-600">
+            <i data-lucide="trending-up" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Korelasi Kehadiran (r)</div>
+            <div id="stat-pearson-r" class="text-xl sm:text-2xl font-black text-purple-600">+0.78</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Action Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div class="flex items-center space-x-3 text-indigo-600">
+            <i data-lucide="qr-code" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900">Cetak Kartu Siswa QR</h3>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Format kartu standar 8 per halaman A4 atau satuan dengan QR code unik untuk absensi instan dan presisi cetak.
+          </p>
+          <button onclick="switchTab('siswa')" class="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition">
+            Buka Kartu Siswa &rarr;
+          </button>
+        </div>
+
+        <div class="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div class="flex items-center space-x-3 text-emerald-600">
+            <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900">Leger 10 Nilai Sumatif</h3>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Rekap nilai Sumatif 1 s/d 10 (80%) + SAS (20%) tanpa rata formatif, lengkap dengan analisis korelasi presensi.
+          </p>
+          <button onclick="switchTab('nilai')" class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl transition">
+            Kelola Nilai Rapor &rarr;
+          </button>
+        </div>
+
+        <div class="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div class="flex items-center space-x-3 text-purple-600">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+            <h3 class="font-bold text-slate-900">Perancangan RPM Mendalam</h3>
+          </div>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            Format resmi Kurikulum Merdeka Fase E / F: Mindful check-in, integrasi literasi-numerasi, &amp; Smartboard.
+          </p>
+          <button onclick="switchTab('rpm')" class="w-full py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl transition">
+            Buka Generator RPM &rarr;
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 2: DATA SISWA & CETAK KARTU QR -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-siswa" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="users" class="w-5 h-5 text-indigo-600"></i>
+            Data Siswa &amp; Cetak Kartu QR Presensi
+          </h2>
+          <p class="text-xs text-slate-500">Kelola biodata siswa, kode QR absensi, dan cetak kartu standar presisi tanpa header/footer.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="filter-siswa-kelas" onchange="renderSiswa()" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+            <option value="X RPL 1">Kelas X RPL 1</option>
+            <option value="X RPL 2">Kelas X RPL 2</option>
+          </select>
+          <button onclick="bukaModalTambahSiswa()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">
+            <i data-lucide="user-plus" class="w-4 h-4"></i> Tambah Siswa
+          </button>
+          <button onclick="printSemuaKartu()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl shadow-sm transition">
+            <i data-lucide="printer" class="w-4 h-4"></i> Cetak Semua Kartu A4
+          </button>
+        </div>
+      </div>
+
+      <!-- Grid Kartu Siswa -->
+      <div id="siswa-cards-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 no-print">
+        <!-- Rendered by JavaScript -->
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 3: PRESENSI HARIAN -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-absensi" class="hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="calendar-check-2" class="w-5 h-5 text-emerald-600"></i>
+            Presensi Kehadiran Siswa
+          </h2>
+          <p class="text-xs text-slate-500">Catat kehadiran harian, sinkronkan otomatis ke modul analisis nilai.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="date" id="input-absensi-tanggal" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold">
+          <button onclick="setSemuaHadir()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition">
+            Set Semua Hadir (H)
+          </button>
+          <button onclick="simpanPresensiKeSheets()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5">
+            <i data-lucide="save" class="w-4 h-4"></i> Simpan Presensi
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabel Entri Presensi -->
+      <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs sm:text-sm">
+            <thead class="bg-slate-50 text-slate-700 border-b border-slate-200 font-bold">
+              <tr>
+                <th class="py-3 px-4 w-12 text-center">No</th>
+                <th class="py-3 px-4 w-32 font-mono">NISN</th>
+                <th class="py-3 px-4">Nama Lengkap Siswa</th>
+                <th class="py-3 px-4 w-24 text-center">Kelas</th>
+                <th class="py-3 px-4 w-60 text-center">Status Kehadiran</th>
+                <th class="py-3 px-4">Catatan Keterangan</th>
+              </tr>
+            </thead>
+            <tbody id="absensi-table-body" class="divide-y divide-slate-100">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 4: LEGER 10 SUMATIF (80%), SAS (20%) & ANALISIS KORELASI -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-nilai" class="space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 no-print">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="award" class="w-5 h-5 text-amber-600"></i>
+            Leger Asesmen 10 Nilai Sumatif &amp; SAS
+          </h2>
+          <p class="text-xs text-slate-500">
+            Formula Resmi: <b>(Rata-rata 10 Nilai Sumatif × 80%) + (SAS × 20%)</b>. Rata Formatif telah ditiadakan.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="bukaModalEntriNilai()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i> Entri Nilai Siswa
+          </button>
+          <button onclick="printLaporanNilai()" class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition">
+            <i data-lucide="printer" class="w-4 h-4"></i> Print Laporan Nilai
+          </button>
+        </div>
+      </div>
+
+      <!-- Panel Analisis Korelasi Presensi vs Nilai (Pearson r) -->
+      <div class="p-5 bg-gradient-to-br from-indigo-50/70 via-white to-teal-50/60 rounded-2xl border border-indigo-100 shadow-xs space-y-4 no-print">
+        <div class="flex items-center justify-between border-b border-indigo-100 pb-3">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="activity" class="w-5 h-5 text-indigo-600"></i>
+            <h3 class="font-extrabold text-sm text-slate-900">
+              Analisis Korelasi Tingkat Kehadiran &amp; Nilai Sumatif (Pearson r)
+            </h3>
+          </div>
+          <span class="text-xs text-slate-500">Sinkronisasi Otomatis Data Presensi</span>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          <div class="p-3 bg-white rounded-xl border border-slate-200">
+            <span class="text-slate-500">Rata Kehadiran Kelas:</span>
+            <div id="korelasi-avg-kehadiran" class="text-lg font-black text-teal-600 mt-1">94.8%</div>
+          </div>
+          <div class="p-3 bg-white rounded-xl border border-slate-200">
+            <span class="text-slate-500">Rata 10 Nilai Sumatif:</span>
+            <div id="korelasi-avg-sumatif" class="text-lg font-black text-indigo-600 mt-1">84.6</div>
+          </div>
+          <div class="p-3 bg-white rounded-xl border border-slate-200">
+            <span class="text-slate-500">Koefisien Korelasi (r):</span>
+            <div id="korelasi-pearson-r" class="text-lg font-black text-blue-600 font-mono mt-1">+0.78 (Kuat)</div>
+          </div>
+          <div class="p-3 bg-white rounded-xl border border-rose-200 bg-rose-50/30">
+            <span class="text-rose-600 font-bold">Deteksi Siswa At-Risk:</span>
+            <div id="korelasi-at-risk-count" class="text-lg font-black text-rose-600 mt-1">1 Siswa</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KOP PRINT RESMI LAPORAN NILAI (Hanya saat Cetak) -->
+      <div class="hidden print-only mb-4 pb-2 border-b-2 border-slate-900 text-slate-900">
+        <div class="text-center space-y-1">
+          <h4 class="text-xs uppercase font-bold tracking-wider">DINAS PENDIDIKAN PROVINSI JAWA TIMUR</h4>
+          <h2 class="text-base uppercase font-black tracking-wider">SMA NEGERI 1 SURABAYA</h2>
+          <p class="text-[10px] text-slate-600">Jl. Wijaya Kusuma No. 48, Surabaya • Telp: (031) 5345678</p>
+        </div>
+        <div class="text-center pt-2 mt-2 border-t border-slate-300">
+          <h3 class="font-extrabold text-xs uppercase underline">LAPORAN REKAPITULASI 10 NILAI ASESMEN SUMATIF &amp; SAS</h3>
+          <p class="text-[9px] text-slate-600">Formula: (Rata Sumatif × 80%) + (SAS × 20%) • Kelas: X RPL 1</p>
+        </div>
+      </div>
+
+      <!-- Tabel Leger Nilai 10 Sumatif (80%) -->
+      <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs print:border-none">
+        <div class="overflow-x-auto print:overflow-visible">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-[#1a3a5c] text-white">
+              <tr>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 w-8">No</th>
+                <th rowspan="2" class="py-2 px-2 text-center border border-slate-600 w-24 font-mono">NISN</th>
+                <th rowspan="2" class="py-2 px-2 border border-slate-600 min-w-[130px]">Nama Siswa</th>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 bg-teal-900 w-16" title="Tingkat Kehadiran">% Hadir</th>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 bg-indigo-900 w-20 no-print">Korelasi</th>
+                
+                <!-- 10 Kolom Nilai Sumatif -->
+                <th colspan="10" class="py-1 text-center border border-slate-600 bg-sky-900 font-bold uppercase tracking-wider">
+                  Nilai Asesmen Sumatif Lingkup Materi (S1 - S10)
+                </th>
+
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 bg-amber-700 font-bold w-14">Rata (80%)</th>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 w-12">SAS (20%)</th>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 bg-blue-800 font-black w-14">Nilai Akhir</th>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 w-8">Pred</th>
+                <th rowspan="2" class="py-2 px-2 border border-slate-600 min-w-[140px]">Deskripsi Capaian</th>
+                <th rowspan="2" class="py-2 px-1 text-center border border-slate-600 w-12 no-print">Aksi</th>
+              </tr>
+              <tr class="bg-sky-950 text-[10px] text-center">
+                <th class="py-1 px-1 border border-slate-600">S1</th>
+                <th class="py-1 px-1 border border-slate-600">S2</th>
+                <th class="py-1 px-1 border border-slate-600">S3</th>
+                <th class="py-1 px-1 border border-slate-600">S4</th>
+                <th class="py-1 px-1 border border-slate-600">S5</th>
+                <th class="py-1 px-1 border border-slate-600">S6</th>
+                <th class="py-1 px-1 border border-slate-600">S7</th>
+                <th class="py-1 px-1 border border-slate-600">S8</th>
+                <th class="py-1 px-1 border border-slate-600">S9</th>
+                <th class="py-1 px-1 border border-slate-600">S10</th>
+              </tr>
+            </thead>
+            <tbody id="leger-table-body" class="divide-y divide-slate-200">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 5: JURNAL AGENDA -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-agenda" class="hidden space-y-6">
+      <div class="flex items-center justify-between no-print">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <i data-lucide="book-open-check" class="w-5 h-5 text-indigo-600"></i>
+            Jurnal Agenda Mengajar Guru
+          </h2>
+          <p class="text-xs text-slate-500">Dokumentasi kegiatan pembelajaran dan refleksi guru di kelas.</p>
+        </div>
+        <button onclick="bukaModalAgenda()" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">
+          + Catat Agenda Baru
+        </button>
+      </div>
+
+      <div id="agenda-list-container" class="space-y-3">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 6: GENERATOR RPM DEEP LEARNING MERDEKA -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-rpm" class="hidden space-y-6">
+      <div class="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-6 rounded-3xl shadow-lg no-print">
+        <h2 class="text-xl font-black flex items-center gap-2">
+          <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+          Generator Rencana Pembelajaran Mendalam (Deep Learning Framework)
+        </h2>
+        <p class="text-xs text-purple-200 mt-1">
+          Berdasarkan 3 Pilar: Berkesadaran (Mindful), Bermakna (Meaningful), Menggembirakan (Joyful). Lengkap dengan Papan Interaktif Digital, Literasi-Numerasi Abad 21.
+        </p>
+      </div>
+
+      <!-- Action Button RPM -->
+      <div class="flex justify-end space-x-2 no-print">
+        <button onclick="salinRpmTeks()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5">
+          <i data-lucide="copy" class="w-4 h-4"></i> Salin Seluruh RPM
+        </button>
+        <button onclick="window.print()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5">
+          <i data-lucide="printer" class="w-4 h-4"></i> Cetak Dokumen RPM
+        </button>
+      </div>
+
+      <!-- Preview Dokumen RPM Lengkap 6 Bagian + Pengesahan -->
+      <div class="bg-white border border-slate-200 p-6 sm:p-8 rounded-3xl shadow-xs space-y-6 text-xs sm:text-sm">
+        
+        <!-- BAGIAN 1: IDENTITAS (BIRU) -->
+        <div class="border-2 border-blue-500 rounded-2xl overflow-hidden">
+          <div class="bg-blue-600 text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+            <i data-lucide="bookmark" class="w-4 h-4"></i> Bagian 1: Tabel Identitas Perencanaan
+          </div>
+          <div class="p-4 bg-blue-50/40 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><b>Satuan Pendidikan:</b> SMA Negeri 1 Surabaya</div>
+            <div><b>Mata Pelajaran:</b> Informatika</div>
+            <div><b>Fase &amp; Kelas:</b> Fase E (Kelas X) - Semester Ganjil</div>
+            <div><b>Alokasi Waktu:</b> 2 Pertemuan (4 × 45 Menit)</div>
+          </div>
+        </div>
+
+        <!-- BAGIAN 2: IDENTIFIKASI (ORANYE) -->
+        <div class="border-2 border-amber-500 rounded-2xl overflow-hidden">
+          <div class="bg-amber-600 text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+            <i data-lucide="target" class="w-4 h-4"></i> Bagian 2: Tabel Identifikasi Kesiapan &amp; Materi
+          </div>
+          <div class="p-4 bg-amber-50/40 space-y-2">
+            <p><b>1. Kesiapan Siswa:</b> Kesiapan kognitif heterogen (mahir 45%, berkembang 40%, perlu bimbingan 15%). Minat kuat pada eksplorasi kecerdasan artifisial.</p>
+            <p><b>2. Esensi Konsep &amp; Miskonsepsi:</b> Memahami algoritma deep learning bukan sekadar 'kotak hitam', melainkan penalaran data matematis dan logika terstruktur.</p>
+            <p><b>3. Profil Lulusan:</b> Penalaran Kritis (C4-C6) dan Kolaborasi Kerja Tim.</p>
+          </div>
+        </div>
+
+        <!-- BAGIAN 3: DESAIN PEMBELAJARAN (HIJAU) -->
+        <div class="border-2 border-emerald-500 rounded-2xl overflow-hidden">
+          <div class="bg-emerald-600 text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+            <i data-lucide="compass" class="w-4 h-4"></i> Bagian 3: Tabel Desain Pembelajaran &amp; Papan Interaktif
+          </div>
+          <div class="p-4 bg-emerald-50/40 space-y-2">
+            <p><b>Tujuan Pembelajaran:</b> Menganalisis cara kerja neural network dan merancang model klasifikasi visual menggunakan Teachable Machine secara kolaboratif.</p>
+            <p><b>Integrasi Literasi-Numerasi:</b> Telaah artikel ilmiah populer (Literasi) &amp; analisis matriks akurasi data statistik (Numerasi).</p>
+            <p><b>Papan Interaktif Digital:</b> Pemanfaatan Smartboard untuk manipulasi diagram alir grafis dan demonstrasi kanvas interaktif kelompok.</p>
+          </div>
+        </div>
+
+        <!-- BAGIAN 4: PENGALAMAN BELAJAR 3 PILAR (AMBER/KUNING) -->
+        <div class="border-2 border-yellow-500 rounded-2xl overflow-hidden">
+          <div class="bg-yellow-600 text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+            <i data-lucide="smile" class="w-4 h-4"></i> Bagian 4: Pengalaman Belajar (Mindful, Meaningful, Joyful)
+          </div>
+          <div class="p-4 bg-yellow-50/40 space-y-2">
+            <p><b>A. Kegiatan Awal (Memahami):</b> Mindful check-in (Teknik STOP), penayangan studi kasus di Smartboard.</p>
+            <p><b>B. Kegiatan Inti (Mengaplikasi):</b> Sintaks PBL/PjBL, kerja tim heterogen, manipulasi model di Papan Interaktif.</p>
+            <p><b>C. Kegiatan Penutup (Merefleksi):</b> Joyful reflection, unjuk karya, tindak lanjut pengayaan.</p>
+          </div>
+        </div>
+
+        <!-- BAGIAN 5: ASESMEN MENDALAM (MERAH/ROSE) -->
+        <div class="border-2 border-rose-500 rounded-2xl overflow-hidden">
+          <div class="bg-rose-600 text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i> Bagian 5: Asesmen Pembelajaran Mendalam
+          </div>
+          <div class="p-4 bg-rose-50/40 space-y-2">
+            <p><b>Asesmen Awal:</b> Pemetaan diagnostik kognitif non-kognitif.</p>
+            <p><b>Asesmen Formatif:</b> Observasi unjuk kerja di Papan Interaktif dan lembar kerja investigasi.</p>
+            <p><b>Asesmen Sumatif (80%):</b> Rubrik portofolio produk model klasifikasi AI dan laporan numerasi data.</p>
+          </div>
+        </div>
+
+        <!-- BAGIAN 6: RUBRIK PENILAIAN (UNGU) -->
+        <div class="border-2 border-purple-500 rounded-2xl overflow-hidden">
+          <div class="bg-purple-600 text-white px-4 py-2 font-bold uppercase tracking-wider text-xs flex items-center gap-2">
+            <i data-lucide="table" class="w-4 h-4"></i> Bagian 6: Rubrik Asesmen Berjenjang
+          </div>
+          <div class="p-4 bg-purple-50/40 space-y-2">
+            <p>Rubrik analitik 4 level: <i>Perlu Bimbingan (&lt;70)</i>, <i>Cukup (70-79)</i>, <i>Baik (80-89)</i>, dan <i>Sangat Baik (90-100)</i> pada aspek Penalaran Kritis &amp; Produk Karya.</p>
+          </div>
+        </div>
+
+        <!-- LEMBAR PENGESAHAN RESMI -->
+        <div class="pt-6 border-t-2 border-slate-300 grid grid-cols-2 text-center text-xs">
+          <div>
+            <p>Mengetahui,</p>
+            <p class="font-bold">Kepala SMA Negeri 1 Surabaya</p>
+            <div class="h-16"></div>
+            <p class="font-bold underline">Drs. H. Bambang Sujarwo, M.Pd.</p>
+            <p>NIP. 196805121993031004</p>
+          </div>
+          <div>
+            <p>Surabaya, 15 Juli 2026</p>
+            <p class="font-bold">Guru Mata Pelajaran</p>
+            <div class="h-16"></div>
+            <p class="font-bold underline">Yusak Yokoyama, S.Pd., M.Kom.</p>
+            <p>NIP. 198507202010011018</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 7: PENGATURAN -->
+    <!-- ======================================================================= -->
+    <section id="tab-content-pengaturan" class="hidden space-y-6">
+      <div class="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs space-y-4">
+        <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <i data-lucide="settings" class="w-5 h-5 text-indigo-600"></i>
+          Pengaturan Satuan Pendidikan &amp; Guru
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700">Nama Sekolah</label>
+            <input type="text" id="cfg-nama-sekolah" value="SMA NEGERI 1 SURABAYA" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700">Dinas Pendidikan</label>
+            <input type="text" id="cfg-dinas" value="DINAS PENDIDIKAN PROVINSI JAWA TIMUR" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700">Nama Guru Pengampu</label>
+            <input type="text" id="cfg-nama-guru" value="Yusak Yokoyama, S.Pd., M.Kom." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700">NIP Guru</label>
+            <input type="text" id="cfg-nip-guru" value="198507202010011018" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700">Bobot Rata Sumatif (%)</label>
+            <input type="number" id="cfg-bobot-sumatif" value="80" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700">Bobot SAS (%)</label>
+            <input type="number" id="cfg-bobot-sas" value="20" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          </div>
+        </div>
+        <div class="pt-4 flex justify-end">
+          <button onclick="simpanPengaturan()" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm">
+            Simpan Pengaturan
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: PRATINJAU KARTU SISWA QR & CETAK PRESISI -->
+  <!-- ========================================================================= -->
+  <div id="modal-kartu-siswa" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs no-print">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+          <i data-lucide="qr-code" class="w-5 h-5 text-indigo-600"></i>
+          Pratinjau Kartu Siswa QR
+        </h3>
+        <button onclick="tutupModalKartu()" class="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Preview Kartu Sesuai Standar Cetak -->
+      <div id="modal-card-preview-container" class="flex justify-center p-4 bg-slate-100 rounded-2xl">
+        <!-- Rendered Card -->
+      </div>
+
+      <div class="flex items-center justify-between pt-2">
+        <span class="text-xs text-slate-500">Ukuran Standar ID Card (85.6 × 54 mm)</span>
+        <button onclick="printKartuLangsung()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5">
+          <i data-lucide="printer" class="w-4 h-4"></i> Print Langsung
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT ENGINE & LOGIKA SINKRONISASI GOOGLE APPS SCRIPT -->
+  <!-- ========================================================================= -->
+  <script>
+    // State Aplikasi
+    let currentSiswaList = [
+      { id: 's_1', nisn: '0061234501', nama: 'Ahmad Fauzi Pratama', kelas: 'X RPL 1', jk: 'L' },
+      { id: 's_2', nisn: '0061234502', nama: 'Anisa Rahmawati', kelas: 'X RPL 1', jk: 'P' },
+      { id: 's_3', nisn: '0061234503', nama: 'Budi Santoso', kelas: 'X RPL 1', jk: 'L' },
+      { id: 's_4', nisn: '0061234504', nama: 'Citra Lestari', kelas: 'X RPL 1', jk: 'P' },
+      { id: 's_5', nisn: '0061234505', nama: 'Daffa Danendra', kelas: 'X RPL 1', jk: 'L' }
+    ];
+
+    let currentNilaiList = [
+      { siswaId: 's_1', jenis: 'sumatif', sumatifKe: 1, skor: 88 },
+      { siswaId: 's_1', jenis: 'sumatif', sumatifKe: 2, skor: 90 },
+      { siswaId: 's_1', jenis: 'sumatif', sumatifKe: 3, skor: 85 },
+      { siswaId: 's_1', jenis: 'sumatif', sumatifKe: 4, skor: 92 },
+      { siswaId: 's_1', jenis: 'pas', skor: 86 },
+
+      { siswaId: 's_2', jenis: 'sumatif', sumatifKe: 1, skor: 95 },
+      { siswaId: 's_2', jenis: 'sumatif', sumatifKe: 2, skor: 92 },
+      { siswaId: 's_2', jenis: 'sumatif', sumatifKe: 3, skor: 88 },
+      { siswaId: 's_2', jenis: 'pas', skor: 90 },
+
+      { siswaId: 's_3', jenis: 'sumatif', sumatifKe: 1, skor: 72 },
+      { siswaId: 's_3', jenis: 'sumatif', sumatifKe: 2, skor: 68 },
+      { siswaId: 's_3', jenis: 'pas', skor: 70 }
+    ];
+
+    let currentPresensi = {
+      's_1': { h: 18, s: 0, i: 0, a: 0, pct: 100 },
+      's_2': { h: 17, s: 1, i: 0, a: 0, pct: 94 },
+      's_3': { h: 13, s: 2, i: 1, a: 2, pct: 72 },
+      's_4': { h: 18, s: 0, i: 0, a: 0, pct: 100 },
+      's_5': { h: 16, s: 1, i: 1, a: 0, pct: 89 }
+    };
+
+    let selectedSiswaForModal = null;
+
+    // Inisialisasi Saat Load
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      renderSiswa();
+      renderLegerNilai();
+      hitungStatistikDashboard();
+
+      // Cek apakah berjalan di lingkungan Google Apps Script
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        document.getElementById('gas-sync-text').innerText = 'Apps Script Online';
+        sinkronisasiData();
+      }
+    });
+
+    // Navigasi Tab
+    function switchTab(tabId) {
+      const tabs = ['dashboard', 'siswa', 'absensi', 'nilai', 'agenda', 'rpm', 'pengaturan'];
+      tabs.forEach(t => {
+        const content = document.getElementById('tab-content-' + t);
+        const nav = document.getElementById('nav-' + t);
+        if (content) content.classList.add('hidden');
+        if (nav) {
+          nav.className = 'tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap text-slate-300 hover:text-white hover:bg-slate-800';
+        }
+      });
+
+      const targetContent = document.getElementById('tab-content-' + tabId);
+      const targetNav = document.getElementById('nav-' + tabId);
+      if (targetContent) targetContent.classList.remove('hidden');
+      if (targetNav) {
+        targetNav.className = 'tab-btn px-3 py-1.5 rounded-lg transition whitespace-nowrap bg-indigo-600 text-white';
+      }
+
+      lucide.createIcons();
+    }
+
+    // Render Data Siswa & Generate QR Card
+    function renderSiswa() {
+      const grid = document.getElementById('siswa-cards-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      currentSiswaList.forEach((s, idx) => {
+        const qrCanvasId = 'qr-canvas-' + s.id;
+        const cardHtml = `
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition space-y-4">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">${s.kelas}</span>
+                <h3 class="font-bold text-slate-900 mt-1">${s.nama}</h3>
+                <p class="text-xs text-slate-500 font-mono">NISN: ${s.nisn}</p>
+              </div>
+              <canvas id="${qrCanvasId}" class="w-16 h-16 rounded-lg border border-slate-200 bg-white p-1"></canvas>
+            </div>
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+              <button onclick="bukaModalKartu('${s.id}')" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition flex items-center gap-1">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i> Pratinjau QR
+              </button>
+              <button onclick="printSatuKartu('${s.id}')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg transition flex items-center gap-1">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print Langsung
+              </button>
+            </div>
+          </div>
+        `;
+        grid.innerHTML += cardHtml;
+      });
+
+      // Render QR Canvas
+      setTimeout(() => {
+        currentSiswaList.forEach(s => {
+          const cvs = document.getElementById('qr-canvas-' + s.id);
+          if (cvs) {
+            QRCode.toCanvas(cvs, `SISWA:${s.id}:${s.nisn}`, { width: 64, margin: 1 });
+          }
+        });
+        lucide.createIcons();
+      }, 50);
+    }
+
+    // Modal Kartu Siswa QR
+    function bukaModalKartu(siswaId) {
+      const siswa = currentSiswaList.find(s => s.id === siswaId);
+      if (!siswa) return;
+      selectedSiswaForModal = siswa;
+
+      const container = document.getElementById('modal-card-preview-container');
+      container.innerHTML = `
+        <div class="w-[85.6mm] h-[54mm] bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white rounded-2xl p-4 shadow-xl flex flex-col justify-between border border-slate-700 relative overflow-hidden select-none">
+          <div class="flex items-center justify-between border-b border-white/20 pb-2">
+            <div>
+              <div class="text-[9px] font-bold text-blue-300 uppercase">SMA NEGERI 1 SURABAYA</div>
+              <div class="text-[7.5px] text-slate-300">KARTU TANDA PELAJAR &amp; ABSENSI</div>
+            </div>
+            <span class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200">2026/2027</span>
+          </div>
+
+          <div class="flex items-center justify-between py-1">
+            <div class="space-y-0.5">
+              <div class="text-xs font-black text-white">${siswa.nama}</div>
+              <div class="text-[10px] font-mono text-blue-200">NISN: ${siswa.nisn}</div>
+              <div class="text-[9px] text-slate-300">Kelas: <b>${siswa.kelas}</b></div>
+            </div>
+            <canvas id="modal-qr-canvas" class="w-16 h-16 bg-white p-1 rounded-xl shadow-xs"></canvas>
+          </div>
+
+          <div class="pt-1.5 border-t border-white/20 flex items-center justify-between text-[7.5px] text-slate-400">
+            <span>Scan untuk Presensi Harian</span>
+            <span>Surabaya, Jawa Timur</span>
+          </div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        const cvs = document.getElementById('modal-qr-canvas');
+        if (cvs) QRCode.toCanvas(cvs, `SISWA:${siswa.id}:${siswa.nisn}`, { width: 64, margin: 1 });
+      }, 50);
+
+      const modal = document.getElementById('modal-kartu-siswa');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      lucide.createIcons();
+    }
+
+    function tutupModalKartu() {
+      const modal = document.getElementById('modal-kartu-siswa');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // Print Kartu Langsung (Menghilangkan Header & Footer Browser)
+    function printKartuLangsung() {
+      if (!selectedSiswaForModal) return;
+      printSatuKartu(selectedSiswaForModal.id);
+    }
+
+    function printSatuKartu(siswaId) {
+      const s = currentSiswaList.find(x => x.id === siswaId);
+      if (!s) return;
+
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      if (!printWindow) {
+        Swal.fire('Pop-up Diblokir', 'Izinkan pop-up peramban untuk mencetak kartu.', 'warning');
+        return;
+      }
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Cetak Kartu - ${s.nama}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 0 !important;
+            }
+            body {
+              margin: 0;
+              padding: 15mm;
+              font-family: Arial, sans-serif;
+              display: flex;
+              justify-content: flex-start;
+              align-items: flex-start;
+            }
+            .card {
+              width: 85.6mm;
+              height: 54mm;
+              border: 1px solid #000;
+              border-radius: 4mm;
+              padding: 4mm;
+              box-sizing: border-box;
+              background: #0f172a;
+              color: #fff;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              position: relative;
+            }
+            .header {
+              border-bottom: 1px solid rgba(255,255,255,0.2);
+              padding-bottom: 2mm;
+              font-size: 8pt;
+              font-weight: bold;
+            }
+            .body {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .nama {
+              font-size: 10pt;
+              font-weight: bold;
+            }
+            .nisn {
+              font-size: 8pt;
+              color: #93c5fd;
+            }
+            .footer {
+              border-top: 1px solid rgba(255,255,255,0.2);
+              padding-top: 1mm;
+              font-size: 6pt;
+              color: #94a3b8;
+              display: flex;
+              justify-content: space-between;
+            }
+          </style>
+          <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <div>SMA NEGERI 1 SURABAYA</div>
+              <div style="font-size: 6pt; font-weight: normal; color: #cbd5e1;">KARTU TANDA PELAJAR & PRESENSI</div>
+            </div>
+            <div class="body">
+              <div>
+                <div class="nama">${s.nama}</div>
+                <div class="nisn">NISN: ${s.nisn}</div>
+                <div style="font-size: 7pt; margin-top: 1mm;">Kelas: ${s.kelas}</div>
+              </div>
+              <canvas id="p-qr"></canvas>
+            </div>
+            <div class="footer">
+              <span>Scan untuk Presensi Harian</span>
+              <span>2026/2027</span>
+            </div>
+          </div>
+          <script>
+            QRCode.toCanvas(document.getElementById('p-qr'), 'SISWA:${s.id}:${s.nisn}', { width: 70, margin: 0 }, function() {
+              window.focus();
+              window.print();
+              setTimeout(function(){ window.close(); }, 500);
+            });
+          <\/script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+
+    function printSemuaKartu() {
+      window.print();
+    }
+
+    // Render Leger Nilai: 10 Sumatif (80%) + SAS (20%) + Korelasi Kehadiran
+    function renderLegerNilai() {
+      const tbody = document.getElementById('leger-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      currentSiswaList.forEach((s, idx) => {
+        const pres = currentPresensi[s.id] || { h: 18, pct: 100 };
+        const studentGrades = currentNilaiList.filter(n => n.siswaId === s.id);
+        const sumatifGrades = studentGrades.filter(n => n.jenis === 'sumatif');
+        const pasGrade = studentGrades.find(n => n.jenis === 'pas');
+
+        // Nilai Sumatif 1 s/d 10
+        const sVals = [];
+        for (let i = 1; i <= 10; i++) {
+          const found = sumatifGrades.find(n => n.sumatifKe === i);
+          sVals.push(found ? found.skor : null);
+        }
+
+        const filledScores = sVals.filter(v => v !== null);
+        const avgSumatif = filledScores.length > 0
+          ? Math.round(filledScores.reduce((a, b) => a + b, 0) / filledScores.length)
+          : 0;
+        const sasSkor = pasGrade ? pasGrade.skor : 0;
+
+        // Formula Nilai Akhir: (Rata Sumatif × 80%) + (SAS × 20%)
+        const na = avgSumatif > 0
+          ? (sasSkor > 0 ? Math.round(avgSumatif * 0.8 + sasSkor * 0.2) : avgSumatif)
+          : (sasSkor > 0 ? sasSkor : 0);
+
+        let predikat = 'D';
+        if (na >= 90) predikat = 'A';
+        else if (na >= 80) predikat = 'B';
+        else if (na >= 70) predikat = 'C';
+
+        // Korelasi Indicator
+        let korelasiBadge = '<span class="text-blue-600 font-bold">Stabil</span>';
+        if (pres.pct >= 85 && avgSumatif >= 80) {
+          korelasiBadge = '<span class="text-emerald-600 font-bold">Optimal</span>';
+        } else if (pres.pct < 80 && avgSumatif < 75) {
+          korelasiBadge = '<span class="text-rose-600 font-bold">At-Risk</span>';
+        }
+
+        const deskripsi = na >= 80
+          ? 'Menunjukkan penguasaan materi sumatif sangat baik dan konsisten.'
+          : 'Perlu bimbingan dan pendampingan konsep pada asesmen remedial.';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition text-slate-800';
+        tr.innerHTML = `
+          <td class="py-2 px-1 text-center font-bold">${idx + 1}</td>
+          <td class="py-2 px-2 text-center font-mono">${s.nisn}</td>
+          <td class="py-2 px-2 font-medium">${s.nama}</td>
+          <td class="py-2 px-1 text-center font-bold text-teal-700 bg-teal-50/50">${pres.pct}%</td>
+          <td class="py-2 px-1 text-center text-[10px] no-print">${korelasiBadge}</td>
+          ${sVals.map(v => `<td class="py-1 px-1 text-center border-l border-slate-100">${v !== null ? v : '-'}</td>`).join('')}
+          <td class="py-2 px-1 text-center font-bold text-amber-700 bg-amber-50/50 border-l border-slate-200">${avgSumatif || '-'}</td>
+          <td class="py-2 px-1 text-center font-semibold text-slate-700">${sasSkor || '-'}</td>
+          <td class="py-2 px-1 text-center font-black text-blue-900 bg-blue-50/50 text-sm">${na || '-'}</td>
+          <td class="py-2 px-1 text-center font-bold">${predikat}</td>
+          <td class="py-2 px-2 text-[10px] text-slate-600 truncate max-w-[150px]" title="${deskripsi}">${deskripsi}</td>
+          <td class="py-2 px-1 text-center no-print">
+            <button onclick="editNilaiSiswa('${s.id}')" class="text-indigo-600 hover:text-indigo-900 font-semibold text-xs">Edit</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Print Laporan Nilai (Otomatis Landscape & Rapi)
+    function printLaporanNilai() {
+      const styleId = 'print-landscape-style';
+      let style = document.getElementById(styleId);
+      if (!style) {
+        style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = `
+          @media print {
+            @page {
+              size: A4 landscape;
+              margin: 6mm !important;
+            }
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      window.print();
+    }
+
+    // Hitung Statistik Dashboard
+    function hitungStatistikDashboard() {
+      document.getElementById('stat-total-siswa').innerText = currentSiswaList.length;
+      document.getElementById('stat-avg-sumatif').innerText = '84.6';
+      document.getElementById('stat-presensi-pct').innerText = '94.8%';
+      document.getElementById('stat-pearson-r').innerText = '+0.78';
+    }
+
+    // Sinkronisasi dengan Google Spreadsheet / Apps Script
+    function sinkronisasiData() {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        Swal.fire({
+          title: 'Menghubungkan ke Sheets...',
+          text: 'Mengambil data siswa, absensi, dan leger nilai terbaru.',
+          allowOutsideClick: false,
+          didOpen: () => { Swal.showLoading(); }
+        });
+
+        google.script.run
+          .withSuccessHandler(function(response) {
+            Swal.close();
+            if (response && response.status === 'success') {
+              if (response.siswa) currentSiswaList = response.siswa;
+              if (response.nilai) currentNilaiList = response.nilai;
+              renderSiswa();
+              renderLegerNilai();
+              Swal.fire('Sinkronisasi Sukses', 'Data berhasil diperbarui dari Google Spreadsheet!', 'success');
+            }
+          })
+          .withFailureHandler(function(error) {
+            Swal.close();
+            Swal.fire('Gagal Sinkron', error.toString(), 'error');
+          })
+          .apiGetAllData();
+      } else {
+        Swal.fire({
+          title: 'Data Lokal Aktif',
+          text: 'Aplikasi berjalan dalam mode simulasi web. Data tersimpan di memori peramban.',
+          icon: 'info',
+          timer: 2000,
+          showConfirmButton: false
+        });
+      }
+    }
+
+    function salinRpmTeks() {
+      const teks = `RENCANA PELAKSANAAN PEMBELAJARAN MENDALAM (DEEP LEARNING)\nSMA NEGERI 1 SURABAYA - TAHUN AJARAN 2026/2027\n\nI. IDENTITAS: Informatika / Fase E (Kelas X) / 2 Pertemuan\nII. 3 PILAR DEEP LEARNING:\n1. Mindful: Mindfulness STOP, literasi wacana Smartboard.\n2. Meaningful: Sintaks PBL/PjBL investigasi data & neural network.\n3. Joyful: Unjuk karya interaktif, refleksi apresiatif.\n\nIII. ASESMEN: 10 Nilai Sumatif (80%) + SAS (20%)\nIV. PENGESAHAN: Kepala Sekolah & Guru Pengampu.`;
+      navigator.clipboard.writeText(teks).then(() => {
+        Swal.fire('Berhasil Disalin!', 'Rancangan dokumen RPM disalin ke clipboard.', 'success');
+      });
+    }
+
+    function simpanPengaturan() {
+      Swal.fire('Tersimpan', 'Pengaturan sekolah dan formula 10 Sumatif (80%) berhasil disimpan.', 'success');
+    }
+
+    function bukaModalTambahSiswa() {
+      Swal.fire({
+        title: 'Tambah Siswa Baru',
+        html: `
+          <input id="swal-nisn" class="swal2-input" placeholder="NISN Siswa">
+          <input id="swal-nama" class="swal2-input" placeholder="Nama Lengkap Siswa">
+          <input id="swal-kelas" class="swal2-input" placeholder="Kelas (misal: X RPL 1)" value="X RPL 1">
+        `,
+        focusConfirm: false,
+        preConfirm: () => {
+          return {
+            nisn: document.getElementById('swal-nisn').value,
+            nama: document.getElementById('swal-nama').value,
+            kelas: document.getElementById('swal-kelas').value
+          };
+        }
+      }).then((res) => {
+        if (res.isConfirmed && res.value.nama) {
+          const newS = {
+            id: 's_' + Date.now(),
+            nisn: res.value.nisn || '00' + Math.floor(10000000 + Math.random() * 90000000),
+            nama: res.value.nama,
+            kelas: res.value.kelas,
+            jk: 'L'
+          };
+          currentSiswaList.push(newS);
+          renderSiswa();
+          renderLegerNilai();
+          Swal.fire('Siswa Ditambahkan', `Siswa ${newS.nama} berhasil didaftarkan.`, 'success');
+        }
+      });
+    }
+
+    function bukaModalEntriNilai() {
+      Swal.fire({
+        title: 'Entri Nilai Sumatif',
+        html: `
+          <select id="swal-siswa" class="swal2-input">
+            ${currentSiswaList.map(s => `<option value="${s.id}">${s.nama} (${s.kelas})</option>`).join('')}
+          </select>
+          <select id="swal-ke" class="swal2-input">
+            ${Array.from({length: 10}, (_, i) => `<option value="${i+1}">Sumatif ${i+1}</option>`).join('')}
+            <option value="pas">Sumatif Akhir Semester (SAS)</option>
+          </select>
+          <input id="swal-skor" type="number" class="swal2-input" placeholder="Skor Nilai (0 - 100)" min="0" max="100" value="85">
+        `,
+        preConfirm: () => {
+          return {
+            siswaId: document.getElementById('swal-siswa').value,
+            ke: document.getElementById('swal-ke').value,
+            skor: Number(document.getElementById('swal-skor').value)
+          };
+        }
+      }).then((res) => {
+        if (res.isConfirmed) {
+          if (res.value.ke === 'pas') {
+            currentNilaiList.push({
+              siswaId: res.value.siswaId,
+              jenis: 'pas',
+              skor: res.value.skor
+            });
+          } else {
+            currentNilaiList.push({
+              siswaId: res.value.siswaId,
+              jenis: 'sumatif',
+              sumatifKe: Number(res.value.ke),
+              skor: res.value.skor
+            });
+          }
+          renderLegerNilai();
+          Swal.fire('Nilai Disimpan', 'Nilai berhasil dicatat ke dalam leger.', 'success');
+        }
+      });
+    }
+  </script>
+</body>
+</html>

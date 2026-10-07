@@ -1,0 +1,957 @@
+/**
+ * ======================================================================================
+ * APLIKASI ADMINISTRASI GURU KURIKULUM MERDEKA PRO - GOOGLE APPS SCRIPT (GAS)
+ * ======================================================================================
+ * File: Code.gs (disimpan sebagai code.txt)
+ * Backend & Database Engine: Google Spreadsheet (Sheets)
+ * Fitur Terintegrasi:
+ * 1. Manajemen Siswa & NISN
+ * 2. Modul Presensi & Rekap Kehadiran Realtime
+ * 3. Asesmen Leger 10 Nilai Sumatif (80%) + SAS (20%) + Nilai Akhir
+ * 4. Sinkronisasi Otomatis Korelasi Presensi vs Nilai Sumatif (Pearson r Correlation)
+ * 5. Jurnal Agenda Mengajar Guru
+ * 6. Bimbingan Konseling & Karakter
+ * 7. Web App REST API (doGet & doPost) dengan CORS Friendly Output
+ * 
+ * ======================================================================================
+ * PANDUAN CARA MEMASANG DI GOOGLE APPS SCRIPT (5 LANGKAH MUDAH):
+ * ======================================================================================
+ * 1. Buka browser dan buat Google Sheets baru di https://sheets.new
+ * 2. Beri nama Spreadsheet, misal: "Database Administrasi Guru Merdeka 2026/2027"
+ * 3. Buka menu: Ekstensi > Apps Script
+ * 4. Hapus semua kode default di file Code.gs, lalu Salin & Tempel (Paste) seluruh isi file ini.
+ * 5. Simpan (Ctrl+S / Cmd+S).
+ * 6. Jalankan fungsi "inisialisasiDatabase" dari dropdown fungsi di atas editor, klik Run (Jalankan).
+ *    (Izinkan akses Google jika muncul peringatan otorisasi pertama kali).
+ * 7. Untuk menjadikannya Web App / API online:
+ *    - Klik tombol "Terapkan" (Deploy) di kanan atas > "Deployment baru" (New deployment).
+ *    - Pilih jenis: "Aplikasi web" (Web app).
+ *    - Konfigurasi:
+ *      * Deskripsi       : Versi 1.0 Administrasi Guru Merdeka
+ *      * Jalankan sebagai: Saya (email Anda)
+ *      * Akses           : Siapa saja (Anyone)
+ *    - Klik "Terapkan" (Deploy) dan salin URL Web App yang dihasilkan.
+ * ======================================================================================
+ */
+
+// Konstanta Nama Sheet Database
+var SHEET_NAMES = {
+  SISWA: 'SISWA',
+  MAPEL: 'MAPEL',
+  JADWAL: 'JADWAL',
+  ABSENSI: 'ABSENSI',
+  NILAI: 'NILAI',
+  AGENDA: 'AGENDA',
+  BIMBINGAN: 'BIMBINGAN',
+  PENGATURAN: 'PENGATURAN',
+  LEGER_NILAI: 'LEGER_NILAI'
+};
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 1. MENU KUSTOM SPREADSHEET (Tampil otomatis saat Google Spreadsheet dibuka)
+ * --------------------------------------------------------------------------------------
+ */
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('📚 Administrasi Guru Merdeka')
+    .addItem('⚡ Inisialisasi / Reset Database Sheet', 'inisialisasiDatabase')
+    .addSeparator()
+    .addItem('📊 Buat / Perbarui Lembar Leger Nilai (10 Sumatif + SAS)', 'generateLegerNilaiSheet')
+    .addItem('🔄 Analisis Korelasi Presensi vs Nilai Sumatif', 'dialogAnalisisKorelasi')
+    .addSeparator()
+    .addItem('📥 Muat Data Sampel Guru & Siswa', 'muatDataSampel')
+    .addItem('🌐 Info Deployment Web App / API', 'infoDeployment')
+    .addToUi();
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 2. INISIALISASI DATABASE & STRUKTUR TABEL OTOMATIS
+ * --------------------------------------------------------------------------------------
+ */
+function inisialisasiDatabase() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Format Header Standar
+  var headerColor = '#1A3A5C';
+  var headerFontColor = '#FFFFFF';
+
+  // 1. Sheet SISWA
+  var sheetSiswa = getOrCreateSheet(ss, SHEET_NAMES.SISWA);
+  if (sheetSiswa.getLastRow() === 0) {
+    sheetSiswa.appendRow([
+      'ID', 'NISN', 'Nama Lengkap Siswa', 'Kelas', 'Jenis Kelamin (L/P)',
+      'No HP Orang Tua', 'Alamat', 'URL Foto', 'Status Aktif', 'Dibuat Pada'
+    ]);
+    formatHeaderRow(sheetSiswa, headerColor, headerFontColor);
+  }
+
+  // 2. Sheet MAPEL
+  var sheetMapel = getOrCreateSheet(ss, SHEET_NAMES.MAPEL);
+  if (sheetMapel.getLastRow() === 0) {
+    sheetMapel.appendRow([
+      'ID', 'Kode Mapel', 'Nama Mata Pelajaran', 'Tingkat / Fase', 'Guru Pengampu', 'Alokasi JP per Minggu'
+    ]);
+    formatHeaderRow(sheetMapel, headerColor, headerFontColor);
+  }
+
+  // 3. Sheet JADWAL
+  var sheetJadwal = getOrCreateSheet(ss, SHEET_NAMES.JADWAL);
+  if (sheetJadwal.getLastRow() === 0) {
+    sheetJadwal.appendRow([
+      'ID', 'Hari', 'Jam Ke', 'Waktu Mulai', 'Waktu Selesai', 'ID Mapel', 'Nama Mapel', 'Kelas / Rombel', 'Ruang Kelas'
+    ]);
+    formatHeaderRow(sheetJadwal, headerColor, headerFontColor);
+  }
+
+  // 4. Sheet ABSENSI
+  var sheetAbsensi = getOrCreateSheet(ss, SHEET_NAMES.ABSENSI);
+  if (sheetAbsensi.getLastRow() === 0) {
+    sheetAbsensi.appendRow([
+      'ID', 'Tanggal (YYYY-MM-DD)', 'ID Siswa', 'Nama Siswa', 'Kelas',
+      'Status (H/S/I/A)', 'Catatan Kehadiran', 'Waktu Timestamp', 'User Pencatat'
+    ]);
+    formatHeaderRow(sheetAbsensi, '#0F766E', headerFontColor);
+  }
+
+  // 5. Sheet NILAI (10 Sumatif Lingkup Materi + SAS)
+  var sheetNilai = getOrCreateSheet(ss, SHEET_NAMES.NILAI);
+  if (sheetNilai.getLastRow() === 0) {
+    sheetNilai.appendRow([
+      'ID', 'ID Siswa', 'Nama Siswa', 'Kelas', 'ID Mapel', 'Nama Mapel',
+      'Jenis Asesmen (sumatif/pas)', 'Sumatif Ke (1-10)', 'Lingkup Materi / TP',
+      'Skor Nilai (0-100)', 'Semester', 'Waktu Entri'
+    ]);
+    formatHeaderRow(sheetNilai, '#1E40AF', headerFontColor);
+  }
+
+  // 6. Sheet AGENDA MENGAJAR
+  var sheetAgenda = getOrCreateSheet(ss, SHEET_NAMES.AGENDA);
+  if (sheetAgenda.getLastRow() === 0) {
+    sheetAgenda.appendRow([
+      'ID', 'Tanggal', 'Jam Ke', 'Kelas', 'Mata Pelajaran', 'Materi Pokok KBM',
+      'Tujuan Pembelajaran (TP)', 'Jumlah Hadir', 'Jumlah Tidak Hadir', 'Catatan Refleksi Guru'
+    ]);
+    formatHeaderRow(sheetAgenda, '#7C3AED', headerFontColor);
+  }
+
+  // 7. Sheet BIMBINGAN SISWA
+  var sheetBimbingan = getOrCreateSheet(ss, SHEET_NAMES.BIMBINGAN);
+  if (sheetBimbingan.getLastRow() === 0) {
+    sheetBimbingan.appendRow([
+      'ID', 'Tanggal', 'ID Siswa', 'Nama Siswa', 'Kelas', 'Kasus / Topik Bimbingan',
+      'Tindakan / Solusi Guru', 'Hasil Pembinaan', 'Status Penanganan'
+    ]);
+    formatHeaderRow(sheetBimbingan, '#C026D3', headerFontColor);
+  }
+
+  // 8. Sheet PENGATURAN
+  var sheetPengaturan = getOrCreateSheet(ss, SHEET_NAMES.PENGATURAN);
+  if (sheetPengaturan.getLastRow() === 0) {
+    sheetPengaturan.appendRow(['Kunci Parameter', 'Nilai Pengaturan', 'Keterangan']);
+    formatHeaderRow(sheetPengaturan, '#334155', headerFontColor);
+
+    var defaultSettings = [
+      ['namaSekolah', 'SMA NEGERI 1 SURABAYA', 'Nama Satuan Pendidikan'],
+      ['npsn', '20532145', 'Nomor Pokok Sekolah Nasional'],
+      ['dinasPendidikan', 'DINAS PENDIDIKAN PROVINSI JAWA TIMUR', 'Instansi Dinas Pembina'],
+      ['alamatSekolah', 'Jl. Wijaya Kusuma No. 48, Surabaya', 'Alamat Lengkap Satuan Pendidikan'],
+      ['noTelpSekolah', '(031) 5345678', 'Nomor Telepon Kantor'],
+      ['emailSekolah', 'info@sman1surabaya.sch.id', 'Email Resmi Sekolah'],
+      ['namaKepsek', 'Drs. H. Bambang Sujarwo, M.Pd.', 'Nama Lengkap Kepala Sekolah'],
+      ['nipKepsek', '196805121993031004', 'NIP Kepala Sekolah'],
+      ['namaGuru', 'Yusak Yokoyama, S.Pd., M.Kom.', 'Nama Lengkap Guru Pengampu'],
+      ['nipGuru', '198507202010011018', 'NIP Guru Pengampu'],
+      ['mapelUtama', 'Informatika', 'Mata Pelajaran yang Diampu'],
+      ['faseKelas', 'Fase E (Kelas X)', 'Fase dan Tingkat Kelas'],
+      ['semesterAktif', 'Ganjil 2026/2027', 'Tahun Ajaran & Semester'],
+      ['kota', 'Surabaya', 'Kota Tempat Penandatanganan Dokumen'],
+      ['kktpNilai', '75', 'Kriteria Ketercapaian Tujuan Pembelajaran (KKTP)'],
+      ['bobotSumatif', '80', 'Persentase Bobot Rata Sumatif (80%)'],
+      ['bobotSas', '20', 'Persentase Bobot Nilai SAS (20%)'],
+      ['logoSekolahUrl', '', 'URL Gambar Logo Resmi Sekolah']
+    ];
+    sheetPengaturan.getRange(2, 1, defaultSettings.length, 3).setValues(defaultSettings);
+  }
+
+  SpreadsheetApp.getActiveSpreadsheet().toast('Struktur database berhasil diinisialisasi!', 'Sukses', 4);
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 3. ROUTER WEB APP REST API (doGet & doPost)
+ * --------------------------------------------------------------------------------------
+ */
+
+/**
+ * Endpoint GET: Mendukung pemanggilan data JSON dan Tampilan Web App
+ */
+function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+
+  // Mode 1: Serve JSON API jika diminta aksi spesifik
+  if (action) {
+    var result = {};
+    try {
+      switch (action) {
+        case 'ping':
+          result = { status: 'success', message: 'API Tongguru Apps Script Aktif & Terhubung', timestamp: new Date() };
+          break;
+        case 'getSiswa':
+          result = { status: 'success', data: apiGetSiswa(e.parameter.kelas) };
+          break;
+        case 'getMapel':
+          result = { status: 'success', data: apiGetMapel() };
+          break;
+        case 'getJadwal':
+          result = { status: 'success', data: apiGetJadwal() };
+          break;
+        case 'getAbsensi':
+          result = { status: 'success', data: apiGetAbsensi(e.parameter.kelas, e.parameter.tanggal) };
+          break;
+        case 'getNilai':
+          result = { status: 'success', data: apiGetNilai(e.parameter.kelas, e.parameter.mapelId) };
+          break;
+        case 'getAgenda':
+          result = { status: 'success', data: apiGetAgenda() };
+          break;
+        case 'getBimbingan':
+          result = { status: 'success', data: apiGetBimbingan() };
+          break;
+        case 'getPengaturan':
+          result = { status: 'success', data: apiGetPengaturan() };
+          break;
+        case 'getAllData':
+          result = {
+            status: 'success',
+            siswa: apiGetSiswa(),
+            mapel: apiGetMapel(),
+            jadwal: apiGetJadwal(),
+            absensi: apiGetAbsensi(),
+            nilai: apiGetNilai(),
+            agenda: apiGetAgenda(),
+            bimbingan: apiGetBimbingan(),
+            pengaturan: apiGetPengaturan()
+          };
+          break;
+        case 'getKorelasi':
+          var targetKelas = e.parameter.kelas || 'X RPL 1';
+          var targetMapel = e.parameter.mapelId || '';
+          result = { status: 'success', data: apiHitungKorelasi(targetKelas, targetMapel) };
+          break;
+        default:
+          result = { status: 'error', message: 'Aksi "' + action + '" tidak dikenali.' };
+      }
+    } catch (err) {
+      result = { status: 'error', message: err.toString() };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Mode 2: Serve Antarmuka Web App HTML jika dibuka langsung di browser
+  return HtmlService.createHtmlOutput(renderWebAppUi())
+    .setTitle('Administrasi Guru Merdeka Pro')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * Endpoint POST: Menerima pengiriman data (JSON Payload) dari Web App
+ */
+function doPost(e) {
+  var result = {};
+  try {
+    var rawData = e.postData ? e.postData.contents : '';
+    var payload = {};
+
+    if (rawData) {
+      payload = JSON.parse(rawData);
+    } else if (e.parameter) {
+      payload = e.parameter;
+    }
+
+    var action = payload.action || '';
+
+    switch (action) {
+      case 'saveSiswa':
+        result = apiSaveSiswa(payload.data);
+        break;
+      case 'deleteSiswa':
+        result = apiDeleteRowById(SHEET_NAMES.SISWA, payload.id);
+        break;
+      case 'saveAbsensi':
+        result = apiSaveAbsensiBatch(payload.data);
+        break;
+      case 'saveNilai':
+        result = apiSaveNilai(payload.data);
+        break;
+      case 'deleteNilai':
+        result = apiDeleteRowById(SHEET_NAMES.NILAI, payload.id);
+        break;
+      case 'saveAgenda':
+        result = apiSaveAgenda(payload.data);
+        break;
+      case 'saveBimbingan':
+        result = apiSaveBimbingan(payload.data);
+        break;
+      case 'savePengaturan':
+        result = apiSavePengaturan(payload.data);
+        break;
+      case 'syncAll':
+        result = apiBulkSync(payload.data);
+        break;
+      default:
+        result = { status: 'error', message: 'Aksi POST "' + action + '" tidak valid.' };
+    }
+  } catch (err) {
+    result = { status: 'error', message: err.toString() };
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 4. FUNGSI LOGIKA CRUD DATA (GOOGLE SHEETS)
+ * --------------------------------------------------------------------------------------
+ */
+
+// A. Ambil Siswa
+function apiGetSiswa(filterKelas) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SISWA);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  var list = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    if (filterKelas && filterKelas !== 'all' && row[3] !== filterKelas) {
+      continue;
+    }
+    list.push({
+      id: String(row[0] || ''),
+      nisn: String(row[1] || ''),
+      nama: String(row[2] || ''),
+      kelas: String(row[3] || ''),
+      jenisKelamin: String(row[4] || 'L'),
+      noHpOrtu: String(row[5] || ''),
+      alamat: String(row[6] || ''),
+      foto: String(row[7] || ''),
+      status: String(row[8] || 'Aktif')
+    });
+  }
+  return list;
+}
+
+// B. Simpan Siswa
+function apiSaveSiswa(siswaObj) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SISWA);
+  if (!sheet) return { status: 'error', message: 'Sheet SISWA tidak ditemukan.' };
+
+  var id = siswaObj.id || ('s_' + new Date().getTime());
+  var nisn = siswaObj.nisn || '';
+  var nama = siswaObj.nama || '';
+  var kelas = siswaObj.kelas || 'X RPL 1';
+  var jk = siswaObj.jenisKelamin || 'L';
+  var hp = siswaObj.noHpOrtu || '';
+  var alamat = siswaObj.alamat || '';
+  var foto = siswaObj.foto || '';
+  var status = siswaObj.status || 'Aktif';
+  var timestamp = new Date();
+
+  var lastRow = sheet.getLastRow();
+  var foundRow = -1;
+
+  if (lastRow > 1) {
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(id)) {
+        foundRow = i + 2;
+        break;
+      }
+    }
+  }
+
+  var rowValues = [id, nisn, nama, kelas, jk, hp, alamat, foto, status, timestamp];
+
+  if (foundRow !== -1) {
+    sheet.getRange(foundRow, 1, 1, rowValues.length).setValues([rowValues]);
+    return { status: 'success', message: 'Data siswa berhasil diperbarui.', id: id };
+  } else {
+    sheet.appendRow(rowValues);
+    return { status: 'success', message: 'Siswa baru berhasil ditambahkan.', id: id };
+  }
+}
+
+// C. Ambil Absensi
+function apiGetAbsensi(filterKelas, filterTanggal) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.ABSENSI);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  var list = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var tgl = formatTanggalIso(row[1]);
+    var kls = String(row[4] || '');
+
+    if (filterKelas && filterKelas !== 'all' && kls !== filterKelas) continue;
+    if (filterTanggal && tgl !== filterTanggal) continue;
+
+    list.push({
+      id: String(row[0] || ''),
+      tanggal: tgl,
+      siswaId: String(row[2] || ''),
+      namaSiswa: String(row[3] || ''),
+      kelas: kls,
+      status: String(row[5] || 'H'),
+      catatan: String(row[6] || ''),
+      timestamp: String(row[7] || ''),
+      userId: String(row[8] || '')
+    });
+  }
+  return list;
+}
+
+// D. Simpan Absensi Batch
+function apiSaveAbsensiBatch(absensiArr) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.ABSENSI);
+  if (!sheet) return { status: 'error', message: 'Sheet ABSENSI tidak ditemukan.' };
+
+  if (!Array.isArray(absensiArr)) {
+    absensiArr = [absensiArr];
+  }
+
+  var lastRow = sheet.getLastRow();
+  var existingMap = {};
+
+  if (lastRow > 1) {
+    var data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+    for (var i = 0; i < data.length; i++) {
+      var key = formatTanggalIso(data[i][1]) + '_' + String(data[i][2]);
+      existingMap[key] = i + 2;
+    }
+  }
+
+  for (var j = 0; j < absensiArr.length; j++) {
+    var item = absensiArr[j];
+    var tgl = item.tanggal || Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
+    var sId = String(item.siswaId || '');
+    var key = tgl + '_' + sId;
+    var rowVals = [
+      item.id || ('abs_' + new Date().getTime() + '_' + j),
+      tgl,
+      sId,
+      item.namaSiswa || '',
+      item.kelas || '',
+      item.status || 'H',
+      item.catatan || '',
+      new Date(),
+      item.userId || 'guru_merdeka'
+    ];
+
+    if (existingMap[key]) {
+      sheet.getRange(existingMap[key], 1, 1, rowVals.length).setValues([rowVals]);
+    } else {
+      sheet.appendRow(rowVals);
+    }
+  }
+
+  return { status: 'success', message: absensiArr.length + ' rekam presensi berhasil disimpan.' };
+}
+
+// E. Ambil Nilai
+function apiGetNilai(filterKelas, filterMapelId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.NILAI);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  var list = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var kls = String(row[3] || '');
+    var mId = String(row[4] || '');
+
+    if (filterKelas && filterKelas !== 'all' && kls !== filterKelas) continue;
+    if (filterMapelId && mId !== filterMapelId) continue;
+
+    list.push({
+      id: String(row[0] || ''),
+      siswaId: String(row[1] || ''),
+      namaSiswa: String(row[2] || ''),
+      kelas: kls,
+      mapelId: mId,
+      namaMapel: String(row[5] || ''),
+      jenis: String(row[6] || 'sumatif'),
+      sumatifKe: Number(row[7] || 1),
+      materi: String(row[8] || ''),
+      skor: Number(row[9] || 0),
+      semester: String(row[10] || 'Ganjil 2026/2027')
+    });
+  }
+  return list;
+}
+
+// F. Simpan Nilai
+function apiSaveNilai(nilaiObj) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.NILAI);
+  if (!sheet) return { status: 'error', message: 'Sheet NILAI tidak ditemukan.' };
+
+  var id = nilaiObj.id || ('n_' + new Date().getTime());
+  var sId = String(nilaiObj.siswaId || '');
+  var mId = String(nilaiObj.mapelId || '');
+  var jenis = nilaiObj.jenis || 'sumatif';
+  var sumatifKe = jenis === 'sumatif' ? Number(nilaiObj.sumatifKe || 1) : 0;
+
+  var lastRow = sheet.getLastRow();
+  var foundRow = -1;
+
+  if (lastRow > 1) {
+    var records = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+    for (var i = 0; i < records.length; i++) {
+      // Check ID or check composite key (siswaId + mapelId + jenis + sumatifKe)
+      if (String(records[i][0]) === id ||
+          (String(records[i][1]) === sId && String(records[i][4]) === mId && String(records[i][6]) === jenis && Number(records[i][7]) === sumatifKe)) {
+        foundRow = i + 2;
+        break;
+      }
+    }
+  }
+
+  var rowVals = [
+    id,
+    sId,
+    nilaiObj.namaSiswa || '',
+    nilaiObj.kelas || '',
+    mId,
+    nilaiObj.namaMapel || '',
+    jenis,
+    sumatifKe,
+    nilaiObj.materi || (jenis === 'sumatif' ? ('Sumatif ' + sumatifKe) : 'Sumatif Akhir Semester'),
+    Number(nilaiObj.skor || 0),
+    nilaiObj.semester || 'Ganjil 2026/2027',
+    new Date()
+  ];
+
+  if (foundRow !== -1) {
+    sheet.getRange(foundRow, 1, 1, rowVals.length).setValues([rowVals]);
+    return { status: 'success', message: 'Nilai berhasil diperbarui.', id: id };
+  } else {
+    sheet.appendRow(rowVals);
+    return { status: 'success', message: 'Nilai baru berhasil direkam.', id: id };
+  }
+}
+
+// G. Ambil & Simpan Pengaturan
+function apiGetPengaturan() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.PENGATURAN);
+  var config = {};
+  if (!sheet || sheet.getLastRow() <= 1) return config;
+
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  for (var i = 0; i < data.length; i++) {
+    var key = String(data[i][0] || '').trim();
+    if (key) {
+      config[key] = String(data[i][1] || '');
+    }
+  }
+  return config;
+}
+
+function apiSavePengaturan(settingsObj) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAMES.PENGATURAN);
+  if (!sheet) return { status: 'error', message: 'Sheet PENGATURAN tidak ditemukan.' };
+
+  var lastRow = sheet.getLastRow();
+  var keys = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues() : [];
+  var keyMap = {};
+  for (var i = 0; i < keys.length; i++) {
+    keyMap[String(keys[i][0])] = i + 2;
+  }
+
+  for (var k in settingsObj) {
+    if (settingsObj.hasOwnProperty(k)) {
+      if (keyMap[k]) {
+        sheet.getRange(keyMap[k], 2).setValue(String(settingsObj[k]));
+      } else {
+        sheet.appendRow([k, String(settingsObj[k]), 'Kustom']);
+      }
+    }
+  }
+  return { status: 'success', message: 'Pengaturan berhasil diperbarui.' };
+}
+
+// H. Hapus Row berdasarkan ID di Kolom A
+function apiDeleteRowById(sheetName, id) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return { status: 'error', message: 'Sheet tidak ditemukan.' };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { status: 'error', message: 'Data kosong.' };
+
+  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) {
+      sheet.deleteRow(i + 2);
+      return { status: 'success', message: 'Data berhasil dihapus.' };
+    }
+  }
+  return { status: 'error', message: 'ID tidak ditemukan.' };
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 5. FUNGSI ANALISIS KORELASI TINGKAT KEHADIRAN VS NILAI SUMATIF (PEARSON r)
+ * --------------------------------------------------------------------------------------
+ */
+function apiHitungKorelasi(kelas, mapelId) {
+  var siswaList = apiGetSiswa(kelas);
+  var absensiList = apiGetAbsensi(kelas);
+  var nilaiList = apiGetNilai(kelas, mapelId);
+
+  var totalSiswa = siswaList.length;
+  if (totalSiswa === 0) {
+    return {
+      kelas: kelas,
+      avgKehadiran: 0,
+      avgSumatif: 0,
+      pearsonR: 0,
+      korelasiKategori: 'Belum Ada Siswa',
+      atRiskCount: 0,
+      selarasCount: 0,
+      detailSiswa: []
+    };
+  }
+
+  var details = [];
+  var totalPct = 0;
+  var totalSumatif = 0;
+  var evaluatedCount = 0;
+  var pairs = [];
+  var atRiskCount = 0;
+  var selarasCount = 0;
+
+  for (var i = 0; i < siswaList.length; i++) {
+    var s = siswaList[i];
+    var sAbsensi = absensiList.filter(function(a) { return a.siswaId === s.id; });
+    var h = sAbsensi.filter(function(a) { return a.status === 'H'; }).length;
+    var sCount = sAbsensi.filter(function(a) { return a.status === 'S'; }).length;
+    var iCount = sAbsensi.filter(function(a) { return a.status === 'I'; }).length;
+    var aCount = sAbsensi.filter(function(a) { return a.status === 'A'; }).length;
+    var totalPresensi = h + sCount + iCount + aCount;
+    var hadirPct = totalPresensi > 0 ? Math.round((h / totalPresensi) * 100) : 100;
+    totalPct += hadirPct;
+
+    var sNilai = nilaiList.filter(function(n) { return n.siswaId === s.id && n.jenis === 'sumatif'; });
+    var sAvg = sNilai.length > 0
+      ? Math.round(sNilai.reduce(function(acc, item) { return acc + item.skor; }, 0) / sNilai.length)
+      : 0;
+
+    if (sAvg > 0) {
+      totalSumatif += sAvg;
+      evaluatedCount++;
+      pairs.push({ x: hadirPct, y: sAvg });
+    }
+
+    var status = 'Stabil';
+    var icon = '🔵';
+    if (hadirPct >= 85 && sAvg >= 80) {
+      status = 'Optimal & Selaras';
+      icon = '🟢';
+      selarasCount++;
+    } else if (hadirPct < 80 && sAvg < 75) {
+      status = 'Perlu Perhatian (At-Risk)';
+      icon = '🔴';
+      atRiskCount++;
+    } else if (hadirPct >= 85 && sAvg < 75) {
+      status = 'Butuh Pendampingan Kognitif';
+      icon = '🟡';
+    } else if (hadirPct < 80 && sAvg >= 80) {
+      status = 'Mandiri & Berbakat';
+      icon = '🟣';
+    }
+
+    details.push({
+      id: s.id,
+      nisn: s.nisn,
+      nama: s.nama,
+      kelas: s.kelas,
+      hadirPct: hadirPct,
+      rekap: { h: h, s: sCount, i: iCount, a: aCount },
+      avgSumatif: sAvg,
+      statusKorelasi: status,
+      icon: icon
+    });
+  }
+
+  // Hitung Pearson r
+  var r = 0;
+  var n = pairs.length;
+  if (n > 1) {
+    var sumX = pairs.reduce(function(sum, p) { return sum + p.x; }, 0);
+    var sumY = pairs.reduce(function(sum, p) { return sum + p.y; }, 0);
+    var sumXY = pairs.reduce(function(sum, p) { return sum + p.x * p.y; }, 0);
+    var sumX2 = pairs.reduce(function(sum, p) { return sum + p.x * p.x; }, 0);
+    var sumY2 = pairs.reduce(function(sum, p) { return sum + p.y * p.y; }, 0);
+
+    var num = n * sumXY - sumX * sumY;
+    var den = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    if (den !== 0) {
+      r = Math.round((num / den) * 100) / 100;
+    }
+  }
+
+  var korelasiKategori = 'Korelasi Positif Sedang';
+  if (r >= 0.6) {
+    korelasiKategori = 'Korelasi Positif Kuat (+ ' + r + ')';
+  } else if (r >= 0.3) {
+    korelasiKategori = 'Korelasi Positif Sedang (+ ' + r + ')';
+  } else if (r > 0) {
+    korelasiKategori = 'Korelasi Lemah (+ ' + r + ')';
+  } else {
+    korelasiKategori = 'Netral / Pengaruh Belajar Mandiri';
+  }
+
+  return {
+    kelas: kelas,
+    avgKehadiran: Math.round(totalPct / totalSiswa),
+    avgSumatif: evaluatedCount > 0 ? Math.round(totalSumatif / evaluatedCount) : 0,
+    pearsonR: r,
+    korelasiKategori: korelasiKategori,
+    atRiskCount: atRiskCount,
+    selarasCount: selarasCount,
+    detailSiswa: details
+  };
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 6. GENERATOR LEMBAR LEGER NILAI LENGKAP (10 SUMATIF + 80% RATA + SAS 20%)
+ * --------------------------------------------------------------------------------------
+ */
+function generateLegerNilaiSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = getOrCreateSheet(ss, SHEET_NAMES.LEGER_NILAI);
+  sheet.clear();
+
+  var pengaturan = apiGetPengaturan();
+  var kelas = 'X RPL 1';
+  var siswaList = apiGetSiswa(kelas);
+  var nilaiList = apiGetNilai(kelas);
+  var absensiList = apiGetAbsensi(kelas);
+
+  // Judul & Kop Laporan
+  sheet.getRange('A1').setValue(String(pengaturan.dinasPendidikan || 'DINAS PENDIDIKAN').toUpperCase())
+    .setFontWeight('bold').setFontSize(11);
+  sheet.getRange('A2').setValue(String(pengaturan.namaSekolah || 'SEKOLAH MENENGAH ATAS').toUpperCase())
+    .setFontWeight('bold').setFontSize(14);
+  sheet.getRange('A3').setValue('LEGER NILAI ASESMEN SUMATIF (1-10), PRESENSI, & NILAI AKHIR RAPOR')
+    .setFontWeight('bold').setFontSize(12).setFontColor('#1E3A8A');
+  sheet.getRange('A4').setValue('Kelas: ' + kelas + ' | Mata Pelajaran: ' + (pengaturan.mapelUtama || 'Informatika') + ' | Formula: (Rata Sumatif × 80%) + (SAS × 20%)')
+    .setFontSize(10).setFontStyle('italic');
+
+  // Header Baris 6
+  var headers = [
+    'No', 'NISN', 'Nama Lengkap Siswa', 'L/P',
+    '% Hadir', 'Korelasi',
+    'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10',
+    'Rata (80%)', 'SAS (20%)', 'Nilai Akhir', 'Predikat', 'Deskripsi Capaian'
+  ];
+
+  sheet.getRange(6, 1, 1, headers.length).setValues([headers]);
+  formatHeaderRow(sheet, '#1A3A5C', '#FFFFFF', 6);
+
+  var rows = [];
+  for (var i = 0; i < siswaList.length; i++) {
+    var s = siswaList[i];
+    var sAbs = absensiList.filter(function(a) { return a.siswaId === s.id; });
+    var h = sAbs.filter(function(a) { return a.status === 'H'; }).length;
+    var tot = sAbs.length;
+    var pct = tot > 0 ? Math.round((h / tot) * 100) : 100;
+
+    var sNilai = nilaiList.filter(function(n) { return n.siswaId === s.id && n.jenis === 'sumatif'; });
+    var sumatifScores = [];
+    var filled = [];
+
+    for (var k = 1; k <= 10; k++) {
+      var found = sNilai.filter(function(n) { return n.sumatifKe === k; });
+      if (found.length > 0) {
+        sumatifScores.push(found[0].skor);
+        filled.push(found[0].skor);
+      } else {
+        sumatifScores.push('-');
+      }
+    }
+
+    var avgS = filled.length > 0 ? Math.round(filled.reduce(function(a, b) { return a + b; }, 0) / filled.length) : 0;
+    var sPas = nilaiList.filter(function(n) { return n.siswaId === s.id && n.jenis === 'pas'; });
+    var sasVal = sPas.length > 0 ? sPas[0].skor : 0;
+
+    var na = avgS > 0
+      ? (sasVal > 0 ? Math.round(avgS * 0.8 + sasVal * 0.2) : avgS)
+      : (sasVal > 0 ? sasVal : 0);
+
+    var predikat = 'D';
+    if (na >= 90) predikat = 'A';
+    else if (na >= 80) predikat = 'B';
+    else if (na >= 70) predikat = 'C';
+
+    var korelasiLabel = (pct >= 85 && avgS >= 80) ? '🟢 Selaras' : ((pct < 80 && avgS < 75) ? '🔴 At-Risk' : '🔵 Stabil');
+    var deskripsi = na >= 80 ? 'Penguasaan konsep dan ketercapaian TP sangat baik.' : 'Perlu penguatan pada lingkup materi sumatif.';
+
+    var row = [
+      i + 1, s.nisn, s.nama, s.jenisKelamin,
+      pct + '%', korelasiLabel,
+      sumatifScores[0], sumatifScores[1], sumatifScores[2], sumatifScores[3], sumatifScores[4],
+      sumatifScores[5], sumatifScores[6], sumatifScores[7], sumatifScores[8], sumatifScores[9],
+      avgS || '-', sasVal || '-', na || '-', predikat, deskripsi
+    ];
+    rows.push(row);
+  }
+
+  if (rows.length > 0) {
+    sheet.getRange(7, 1, rows.length, headers.length).setValues(rows);
+    sheet.getRange(7, 1, rows.length, headers.length).setBorder(true, true, true, true, true, true, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
+  }
+
+  ss.setActiveSheet(sheet);
+  ss.toast('Lembar Leger Nilai 10 Sumatif berhasil diperbarui!', 'Sukses', 4);
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 7. DIALOG & HELPER UTILITIES
+ * --------------------------------------------------------------------------------------
+ */
+function dialogAnalisisKorelasi() {
+  var ui = SpreadsheetApp.getUi();
+  var res = apiHitungKorelasi('X RPL 1', '');
+  var pesan = 'HASIL ANALISIS KORELASI ROMBEL X RPL 1:\n\n' +
+    '• Rata-rata Kehadiran Siswa : ' + res.avgKehadiran + '%\n' +
+    '• Rata-rata Nilai Sumatif    : ' + res.avgSumatif + '\n' +
+    '• Koefisien Pearson (r)      : ' + (res.pearsonR >= 0 ? '+' : '') + res.pearsonR + '\n' +
+    '• Kesimpulan Analisis        : ' + res.korelasiKategori + '\n\n' +
+    '• Siswa Optimal & Selaras    : ' + res.selarasCount + ' Siswa\n' +
+    '• Siswa At-Risk (Perhatian)  : ' + res.atRiskCount + ' Siswa\n\n' +
+    'Buka lembar LEGER_NILAI untuk melihat rincian per siswa.';
+  ui.alert('📊 Analisis Korelasi Presensi vs Nilai', pesan, ui.ButtonSet.OK);
+}
+
+function infoDeployment() {
+  var ui = SpreadsheetApp.getUi();
+  var url = ScriptApp.getService().getUrl();
+  var pesan = 'PANDUAN KONEKSI WEB APP:\n\n' +
+    '1. Klik menu "Deploy" (Terapkan) > "Kelola deployment".\n' +
+    '2. Salin URL Aplikasi Web (Web App URL).\n' +
+    '3. URL saat ini:\n' + (url ? url : '(Belum dideploy. Klik Deploy > New Deployment > Web app > Anyone)') + '\n\n' +
+    'Gunakan URL tersebut untuk integrasi sinkronisasi realtime.';
+  ui.alert('🌐 Info Deployment Apps Script', pesan, ui.ButtonSet.OK);
+}
+
+function muatDataSampel() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  inisialisasiDatabase();
+  var sheetSiswa = ss.getSheetByName(SHEET_NAMES.SISWA);
+
+  if (sheetSiswa.getLastRow() <= 1) {
+    var sampelSiswa = [
+      ['s_001', '0061234501', 'Ahmad Fauzi Pratama', 'X RPL 1', 'L', '081234567890', 'Surabaya', '', 'Aktif', new Date()],
+      ['s_002', '0061234502', 'Anisa Rahmawati', 'X RPL 1', 'P', '081234567891', 'Surabaya', '', 'Aktif', new Date()],
+      ['s_003', '0061234503', 'Budi Santoso', 'X RPL 1', 'L', '081234567892', 'Surabaya', '', 'Aktif', new Date()],
+      ['s_004', '0061234504', 'Citra Lestari', 'X RPL 1', 'P', '081234567893', 'Surabaya', '', 'Aktif', new Date()],
+      ['s_005', '0061234505', 'Daffa Danendra', 'X RPL 1', 'L', '081234567894', 'Surabaya', '', 'Aktif', new Date()]
+    ];
+    sheetSiswa.getRange(2, 1, sampelSiswa.length, sampelSiswa[0].length).setValues(sampelSiswa);
+    ss.toast('Data sampel siswa berhasil dimuat!', 'Sukses', 3);
+  }
+}
+
+// Helpers
+function getOrCreateSheet(ss, name) {
+  var s = ss.getSheetByName(name);
+  if (!s) s = ss.insertSheet(name);
+  return s;
+}
+
+function formatHeaderRow(sheet, bgColor, fontColor, rowNum) {
+  var row = rowNum || 1;
+  var range = sheet.getRange(row, 1, 1, sheet.getLastColumn());
+  range.setBackground(bgColor)
+    .setFontColor(fontColor)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+  sheet.setFrozenRows(row);
+}
+
+function formatTanggalIso(dateVal) {
+  if (!dateVal) return Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
+  if (typeof dateVal === 'string' && dateVal.indexOf('-') > -1) return dateVal.substring(0, 10);
+  try {
+    return Utilities.formatDate(new Date(dateVal), 'Asia/Jakarta', 'yyyy-MM-dd');
+  } catch (e) {
+    return String(dateVal);
+  }
+}
+
+/**
+ * --------------------------------------------------------------------------------------
+ * 8. HTML UI DASHBOARD (Ditampilkan jika URL Web App dibuka di browser)
+ * --------------------------------------------------------------------------------------
+ */
+function renderWebAppUi() {
+  return '<!DOCTYPE html>' +
+    '<html><head><meta charset="utf-8">' +
+    '<title>Tongguru Apps Script Engine</title>' +
+    '<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">' +
+    '</head><body class="bg-gray-100 text-gray-800 p-6">' +
+    '<div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">' +
+    '  <div class="bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-950 p-6 text-white">' +
+    '    <span class="px-3 py-1 bg-blue-500 rounded-full text-xs font-bold uppercase tracking-wider">Apps Script Engine Aktif</span>' +
+    '    <h1 class="text-2xl font-black mt-2">Database &amp; API Administrasi Guru Merdeka</h1>' +
+    '    <p class="text-sm text-blue-200 mt-1">Terhubung langsung dengan Google Sheets (Spreadsheet Database)</p>' +
+    '  </div>' +
+    '  <div class="p-6 space-y-6">' +
+    '    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">' +
+    '      <div class="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">' +
+    '        <div class="text-xs text-blue-700 font-bold uppercase">Endpoint API</div>' +
+    '        <div class="text-lg font-black text-blue-900 mt-1">REST JSON</div>' +
+    '        <p class="text-xs text-gray-500 mt-1">Mendukung doGet &amp; doPost</p>' +
+    '      </div>' +
+    '      <div class="p-4 bg-green-50 border border-green-200 rounded-xl text-center">' +
+    '        <div class="text-xs text-green-700 font-bold uppercase">Asesmen Sumatif</div>' +
+    '        <div class="text-lg font-black text-green-900 mt-1">10 Sumatif (80%)</div>' +
+    '        <p class="text-xs text-gray-500 mt-1">Sinkron Leger Otomatis</p>' +
+    '      </div>' +
+    '      <div class="p-4 bg-purple-50 border border-purple-200 rounded-xl text-center">' +
+    '        <div class="text-xs text-purple-700 font-bold uppercase">Analitik Korelasi</div>' +
+    '        <div class="text-lg font-black text-purple-900 mt-1">Pearson r Correlation</div>' +
+    '        <p class="text-xs text-gray-500 mt-1">Deteksi Siswa At-Risk</p>' +
+    '      </div>' +
+    '    </div>' +
+    '    <div class="border-t border-gray-200 pt-4">' +
+    '      <h3 class="font-bold text-gray-900 mb-2">Panduan Penggunaan Cepat:</h3>' +
+    '      <ol class="list-decimal pl-5 text-sm text-gray-600 space-y-1.5">' +
+    '        <li>Buka Google Spreadsheet terkait untuk melihat tab data <b>SISWA, MAPEL, ABSENSI, NILAI, PENGATURAN, dan LEGER_NILAI</b>.</li>' +
+    '        <li>Gunakan menu kustom <b>"📚 Administrasi Guru Merdeka"</b> di Spreadsheet untuk membuat leger nilai atau analisis korelasi instan.</li>' +
+    '        <li>Panggil API melalui URL ini dengan parameter: <code>?action=getSiswa</code>, <code>?action=getNilai</code>, <code>?action=getKorelasi</code>.</li>' +
+    '      </ol>' +
+    '    </div>' +
+    '  </div>' +
+    '</div></body></html>';
+}
