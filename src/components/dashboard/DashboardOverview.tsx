@@ -224,7 +224,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       },
       {
         id: 'sys-config',
-        title: 'Identitas Master Guru & Sekolah Terverifikasi',
+        title: 'Identitas Guru & Sekolah Terverifikasi',
         description: `Profil guru: ${pengaturan.namaGuru} - Satuan pendidikan: ${pengaturan.namaSekolah}`,
         time: 'Aktif',
         category: 'system',

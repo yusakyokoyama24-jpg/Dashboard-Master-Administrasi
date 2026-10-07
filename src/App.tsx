@@ -126,7 +126,7 @@ export default function App() {
   const handleLogout = () => {
     Swal.fire({
       title: 'Keluar dari Aplikasi?',
-      text: 'Anda akan keluar dari sesi master guru.',
+      text: 'Anda akan keluar dari sesi akun guru.',
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#d33',
@@ -297,16 +297,16 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Title Text with TONGGURU YUSAK YOKOYAMA on bottom line */}
+              {/* Title Text */}
               <div onClick={() => setActiveTab('dashboard')} className="cursor-pointer group text-left">
                 <span className="block font-extrabold text-[10px] sm:text-xs md:text-xs tracking-wider uppercase text-blue-200 leading-tight">
                   DASHBOARD ADMINISTRASI
                 </span>
                 <span className="block font-black text-xs sm:text-sm md:text-base tracking-wide uppercase text-amber-300 group-hover:text-amber-200 transition-colors drop-shadow-md leading-tight">
-                  TONGGURU YUSAK YOKOYAMA
+                  TONGGURU PRO
                 </span>
                 <p className="text-[10px] sm:text-[11px] text-blue-200 hidden sm:block truncate max-w-sm font-semibold mt-0.5">
-                  {pengaturan.namaSekolah} • Master Guru {pengaturan.namaGuru.split(',')[0]}
+                  {pengaturan.namaSekolah} • {pengaturan.namaGuru.split(',')[0]}
                 </p>
               </div>
             </div>
