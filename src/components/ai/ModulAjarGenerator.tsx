@@ -159,7 +159,7 @@ Uraikan 3 aspek identifikasi dengan analisis mendalam khas SMA:
 BAGIAN 3: TABEL DESAIN PEMBELAJARAN (TEMA HIJAU)
 ================================================================================
 Rumuskan secara komprehensif:
-1. Capaian Pembelajaran (CP)
+1. Capaian Pembelajaran (CP) - Rujukan Resmi: Salinan Keputusan Kepala BSKAP Kemendikdasmen No. 046/H/KR/2025 tentang Capaian Pembelajaran pada PAUD, Jenjang Pendidikan Dasar, dan Jenjang Pendidikan Menengah
 2. Lintas Disiplin Ilmu
 3. Tujuan Pembelajaran (TP)
 4. Topik Pembelajaran
@@ -953,9 +953,14 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
           {/* CP & TP */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Capaian Pembelajaran (CP)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Capaian Pembelajaran (CP)
+                </label>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                  Rujukan: SK BSKAP No. 046/H/KR/2025
+                </span>
+              </div>
               <textarea
                 rows={2}
                 value={formData.capaianPembelajaran}

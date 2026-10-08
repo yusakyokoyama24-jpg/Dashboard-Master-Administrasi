@@ -798,7 +798,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 <h4 className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-blue-600">
                   CP, TP, ATP, Prota, Prosem, KKTP
                 </h4>
-                <p className="text-[11px] text-slate-500">6 Format resmi BSKAP Kemendikbudristek</p>
+                <p className="text-[11px] text-slate-500">6 Format resmi SK BSKAP No. 046/H/KR/2025</p>
               </div>
               <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-1" />
             </button>

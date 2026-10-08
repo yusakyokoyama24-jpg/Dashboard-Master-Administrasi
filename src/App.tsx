@@ -303,7 +303,7 @@ export default function App() {
                   DASHBOARD ADMINISTRASI
                 </span>
                 <span className="block font-black text-xs sm:text-sm md:text-base tracking-wide uppercase text-amber-300 group-hover:text-amber-200 transition-colors drop-shadow-md leading-tight">
-                  TONGGURU PRO
+                  TONGGURU YUSAK YOKOYAMA
                 </span>
                 <p className="text-[10px] sm:text-[11px] text-blue-200 hidden sm:block truncate max-w-sm font-semibold mt-0.5">
                   {pengaturan.namaSekolah} • {pengaturan.namaGuru.split(',')[0]}
@@ -560,11 +560,21 @@ export default function App() {
             )}
 
             {activeTab === 'mapel' && (
-              <JadwalManager mapelList={mapelList} jadwalList={jadwalList} initialTab="mapel" />
+              <JadwalManager
+                mapelList={mapelList}
+                jadwalList={jadwalList}
+                siswaList={siswaList}
+                initialTab="mapel"
+              />
             )}
 
             {activeTab === 'jadwal' && (
-              <JadwalManager mapelList={mapelList} jadwalList={jadwalList} initialTab="jadwal" />
+              <JadwalManager
+                mapelList={mapelList}
+                jadwalList={jadwalList}
+                siswaList={siswaList}
+                initialTab="jadwal"
+              />
             )}
 
             {activeTab === 'presensi' && (

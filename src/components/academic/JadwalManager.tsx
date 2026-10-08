@@ -1,17 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { Calendar, Plus, BookOpen, Clock, Trash2, Edit2, Layers, MapPin, Sparkles, LayoutGrid, List } from 'lucide-react';
-import { Mapel, Jadwal } from '../../types';
+import { Mapel, Jadwal, Siswa } from '../../types';
 import { dbService } from '../../services/db';
 import { showToast } from '../../utils/toast';
 
 interface JadwalManagerProps {
   mapelList: Mapel[];
   jadwalList: Jadwal[];
+  siswaList?: Siswa[];
   initialTab?: 'jadwal' | 'mapel';
 }
 
-export const JadwalManager: React.FC<JadwalManagerProps> = ({ mapelList, jadwalList, initialTab = 'jadwal' }) => {
+export const JadwalManager: React.FC<JadwalManagerProps> = ({
+  mapelList,
+  jadwalList,
+  siswaList,
+  initialTab = 'jadwal',
+}) => {
   const [activeTab, setActiveTab] = useState<'jadwal' | 'mapel'>(initialTab);
   const [viewModeMapel, setViewModeMapel] = useState<'grid' | 'table'>('grid');
 
@@ -34,6 +40,7 @@ export const JadwalManager: React.FC<JadwalManagerProps> = ({ mapelList, jadwalL
   // Jadwal modal state
   const [isJadwalModalOpen, setIsJadwalModalOpen] = useState(false);
   const [editingJadwalId, setEditingJadwalId] = useState<string | null>(null);
+  const [isCustomKelas, setIsCustomKelas] = useState(false);
   const [jadwalForm, setJadwalForm] = useState<Partial<Jadwal>>({
     hari: 'Senin',
     jamKe: 'Jam Ke 1-3 (07.00 - 09.15)',
@@ -42,6 +49,27 @@ export const JadwalManager: React.FC<JadwalManagerProps> = ({ mapelList, jadwalL
     kelas: 'X RPL 1',
     ruang: 'Lab Komputer 1',
   });
+
+  // Daftar kelas / rombel yang diambil otomatis dari data siswa & jadwal
+  const availableKelas = useMemo(() => {
+    const listSiswa = siswaList && siswaList.length > 0 ? siswaList : dbService.getSiswa();
+    const fromSiswa = listSiswa.map((s) => s.kelas?.trim()).filter(Boolean);
+    const fromJadwal = (jadwalList || []).map((j) => j.kelas?.trim()).filter(Boolean);
+    const defaultPresets = [
+      'X RPL 1',
+      'X RPL 2',
+      'XI RPL 1',
+      'XI RPL 2',
+      'XII RPL 1',
+      'XII RPL 2',
+    ];
+    const currentKelas = jadwalForm.kelas?.trim();
+    const extra = currentKelas ? [currentKelas] : [];
+    const unique = Array.from(new Set([...fromSiswa, ...fromJadwal, ...defaultPresets, ...extra]))
+      .filter((k): k is string => Boolean(k))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    return unique;
+  }, [siswaList, jadwalList, jadwalForm.kelas]);
 
   const HARI_LIST: ('Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu')[] = [
     'Senin',
@@ -103,13 +131,15 @@ export const JadwalManager: React.FC<JadwalManagerProps> = ({ mapelList, jadwalL
   // Jadwal Handlers
   const handleOpenAddJadwal = (prefillHari?: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu') => {
     setEditingJadwalId(null);
+    setIsCustomKelas(false);
     const firstMapel = mapelList[0];
+    const defaultKelas = availableKelas[0] || 'X RPL 1';
     setJadwalForm({
       hari: prefillHari || 'Senin',
       jamKe: 'Jam Ke 1-3 (07.00 - 09.15)',
       mapelId: firstMapel?.id || '',
       namaMapel: firstMapel?.nama || '',
-      kelas: 'X RPL 1',
+      kelas: defaultKelas,
       ruang: 'Lab Komputer',
     });
     setIsJadwalModalOpen(true);
@@ -117,6 +147,7 @@ export const JadwalManager: React.FC<JadwalManagerProps> = ({ mapelList, jadwalL
 
   const handleOpenEditJadwal = (j: Jadwal) => {
     setEditingJadwalId(j.id);
+    setIsCustomKelas(false);
     setJadwalForm(j);
     setIsJadwalModalOpen(true);
   };
@@ -595,17 +626,53 @@ export const JadwalManager: React.FC<JadwalManagerProps> = ({ mapelList, jadwalL
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kelas / Rombel *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={jadwalForm.kelas || ''}
-                    onChange={(e) => setJadwalForm({ ...jadwalForm, kelas: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white"
-                    placeholder="Contoh: X RPL 1"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Kelas / Rombel *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomKelas(!isCustomKelas)}
+                      className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-semibold hover:underline"
+                    >
+                      {isCustomKelas ? 'Pilih Dropdown' : '+ Input Manual'}
+                    </button>
+                  </div>
+                  {isCustomKelas ? (
+                    <input
+                      type="text"
+                      required
+                      value={jadwalForm.kelas || ''}
+                      onChange={(e) => setJadwalForm({ ...jadwalForm, kelas: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500"
+                      placeholder="Contoh: X RPL 1"
+                      autoFocus
+                    />
+                  ) : (
+                    <select
+                      required
+                      value={jadwalForm.kelas || ''}
+                      onChange={(e) => {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomKelas(true);
+                          setJadwalForm({ ...jadwalForm, kelas: '' });
+                        } else {
+                          setJadwalForm({ ...jadwalForm, kelas: e.target.value });
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 font-medium"
+                    >
+                      <option value="">-- Pilih Kelas / Rombel --</option>
+                      {availableKelas.map((k) => (
+                        <option key={k} value={k}>
+                          {k}
+                        </option>
+                      ))}
+                      <option value="__custom__" className="text-rose-600 font-semibold">
+                        + Tambah Rombel Baru (Ketik Manual)...
+                      </option>
+                    </select>
+                  )}
                 </div>
               </div>
 

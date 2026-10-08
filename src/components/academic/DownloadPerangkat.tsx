@@ -15,12 +15,12 @@ interface PerangkatTemplate {
 const TEMPLATES: PerangkatTemplate[] = [
   {
     id: 'p1',
-    judul: 'Salinan SK BSKAP No. 032/H/KR/2024 tentang Capaian Pembelajaran (CP)',
+    judul: 'Salinan SK Kepala BSKAP Kemendikdasmen No. 046/H/KR/2025 tentang Capaian Pembelajaran (CP)',
     tingkat: 'Umum',
     kategori: 'Regulasi Resmi',
-    ukuran: '4.8 MB',
+    ukuran: '5.2 MB',
     format: 'PDF',
-    deskripsi: 'Regulasi capaian pembelajaran terbaru PAUD, Dikdas, dan Dikmen Kurikulum Merdeka.',
+    deskripsi: 'Salinan Keputusan Kepala Badan Standar, Kurikulum, dan Asesmen Pendidikan Kementerian Pendidikan Dasar dan Menengah Nomor 046/H/KR/2025 tentang Capaian Pembelajaran pada Pendidikan Anak Usia Dini, Jenjang Pendidikan Dasar, dan Jenjang Pendidikan Menengah.',
   },
   {
     id: 'p2',

@@ -32,6 +32,9 @@ export const PerangkatAjarGenerator: React.FC = () => {
           <h2 style="font-size: 16pt; font-weight: bold; color: #1a3a5c; margin: 0; text-transform: uppercase;">DOKUMEN RESMI KURIKULUM MERDEKA</h2>
           <h3 style="font-size: 14pt; font-weight: bold; color: #0f172a; margin: 4px 0 0 0;">${data.jenisDokumen.toUpperCase()}</h3>
           <p style="font-size: 10pt; color: #475569; margin: 4px 0 0 0;">Mata Pelajaran: ${data.mataPelajaran} | ${data.fase} | Tahun Ajaran ${data.tahunAjaran}</p>
+          <p style="font-size: 8.5pt; color: #64748b; margin: 4px 0 0 0; font-style: italic;">
+            Rujukan Regulasi: Salinan Keputusan Kepala BSKAP Kemendikdasmen No. 046/H/KR/2025 tentang Capaian Pembelajaran pada PAUD, Jenjang Dikdas, dan Dikmen
+          </p>
         </div>
 
         <table style="width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px;">
@@ -123,15 +126,21 @@ export const PerangkatAjarGenerator: React.FC = () => {
     <div className="space-y-6">
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-[#1a3a5c] to-slate-900 text-white p-6 rounded-2xl shadow-sm no-print">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-white/10 rounded-xl">
-            <FileCheck className="w-6 h-6 text-emerald-400" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-white/10 rounded-xl">
+              <FileCheck className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Generator Perangkat Ajar Kurikulum Merdeka AI</h2>
+              <p className="text-xs text-slate-300 mt-1">
+                Menghasilkan 6 jenis dokumen resmi siap cetak: <b>Analisis CP</b>, <b>TP</b>, <b>ATP</b>, <b>Prota</b>, <b>Prosem</b>, dan <b>KKTP</b> dengan format tabel `#1a3a5c` dan tanda tangan sejajar.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold">Generator Perangkat Ajar Kurikulum Merdeka AI</h2>
-            <p className="text-xs text-slate-300 mt-1">
-              Menghasilkan 6 jenis dokumen resmi siap cetak: <b>Analisis CP</b>, <b>TP</b>, <b>ATP</b>, <b>Prota</b>, <b>Prosem</b>, dan <b>KKTP</b> dengan format tabel `#1a3a5c` dan tanda tangan sejajar.
-            </p>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/15 border border-emerald-400/30 rounded-xl text-emerald-300 text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="font-semibold">Rujukan Resmi: SK Kepala BSKAP No. 046/H/KR/2025</span>
           </div>
         </div>
       </div>
@@ -216,13 +225,19 @@ export const PerangkatAjarGenerator: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Elemen Capaian / Ruang Lingkup Materi
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Elemen Capaian / Ruang Lingkup Materi *
+              </label>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                Standar SK BSKAP No. 046/H/KR/2025
+              </span>
+            </div>
             <input
               type="text"
               value={formData.elemenCapaian}
               onChange={(e) => setFormData({ ...formData, elemenCapaian: e.target.value })}
+              placeholder="Contoh: Berpikir Komputasional & Algoritma (SK BSKAP No. 046/H/KR/2025)"
               className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
             />
           </div>
@@ -236,7 +251,7 @@ export const PerangkatAjarGenerator: React.FC = () => {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Menyusun Dokumen Resmi dengan Standar BSKAP...
+                  Menyusun Dokumen Resmi (SK BSKAP No. 046/H/KR/2025)...
                 </>
               ) : (
                 <>
