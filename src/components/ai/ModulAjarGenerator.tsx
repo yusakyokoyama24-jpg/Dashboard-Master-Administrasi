@@ -49,7 +49,14 @@ export const ModulAjarGenerator: React.FC = () => {
     alokasiWaktu: '2 Pertemuan (masing-masing 2 × 45 menit)',
     praktikPedagogisP1: 'Problem Based Learning (PBL)',
     praktikPedagogisP2: 'Project Based Learning (PjBL)',
+    praktikPedagogisP3: 'Inkuiri-Discovery Learning',
+    praktikPedagogisP4: 'Case-Based Learning',
+    praktikPedagogisP5: 'Problem Based Learning (PBL)',
+    praktikPedagogisP6: 'Project Based Learning (PjBL)',
+    praktikPedagogisP7: 'Inkuiri-Discovery Learning',
+    praktikPedagogisP8: 'Case-Based Learning',
     dimensiProfilLulusan: ['Penalaran Kritis', 'Kolaborasi', 'Kreativitas'],
+    jumlahPertemuan: '2 Pertemuan',
     kotaTanggal: `${pengaturan.kota || 'Surabaya'}, 15 Juli 2026`,
   });
 
@@ -69,12 +76,14 @@ export const ModulAjarGenerator: React.FC = () => {
   }, []);
 
   const DIMENSI_OPTIONS = [
+    'Keimanan dan Ketaqwaan terhadap Tuhan YME',
+    'Kewargaan',
     'Penalaran Kritis',
     'Kreativitas',
     'Kolaborasi',
     'Kemandirian',
+    'Kesehatan',
     'Komunikasi',
-    'Kewargaan',
   ];
 
   const handleToggleDimensi = (dimensi: string) => {
@@ -94,6 +103,12 @@ export const ModulAjarGenerator: React.FC = () => {
       });
     }
   };
+
+  const numPromptP = parseInt(formData.jumlahPertemuan) || 2;
+  const praktikPedagogisPromptLines = Array.from({ length: numPromptP }, (_, i) => {
+    const key = `praktikPedagogisP${i + 1}` as keyof typeof formData;
+    return `    - Pertemuan ${i + 1}          : ${formData[key] || 'Problem Based Learning (PBL)'}`;
+  }).join('\n');
 
   // Master Prompt Template String (Synchronized with Server)
   const masterPromptText = `[ROLE & PERSONA]
@@ -119,12 +134,12 @@ Anda memiliki keahlian dalam:
 10. Capaian Pembelajaran   : ${formData.capaianPembelajaran}
 11. Tujuan Pembelajaran    : ${formData.tujuanPembelajaran}
 12. Materi Pokok           : ${formData.materiPokok}
-13. Alokasi Waktu          : ${formData.alokasiWaktu}
-14. Praktik Pedagogis      :
-    - Pertemuan 1          : ${formData.praktikPedagogisP1}
-    - Pertemuan 2          : ${formData.praktikPedagogisP2}
-15. Dimensi Profil Lulusan : ${formData.dimensiProfilLulusan.join(', ')}
-16. Kota & Tanggal         : ${formData.kotaTanggal}
+13. Jumlah Pertemuan       : ${formData.jumlahPertemuan}
+14. Alokasi Waktu          : ${formData.alokasiWaktu}
+15. Praktik Pedagogis      :
+${praktikPedagogisPromptLines}
+16. Dimensi Profil Lulusan : ${formData.dimensiProfilLulusan.join(', ')}
+17. Kota & Tanggal         : ${formData.kotaTanggal}
 
 --------------------------------------------------------------------------------
 [PETUNJUK SPESIFIKASI SMA FASE E VS FASE F]
@@ -210,6 +225,19 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
   // Fallback Generator yang secara ketat mengikuti Bagian 1 sampai 6 + Pengesahan
   const generateFallbackModulHtml = (data: typeof formData) => {
     const dimensiStr = data.dimensiProfilLulusan.join(', ');
+    const numP = parseInt(data.jumlahPertemuan) || 2;
+
+    const listPraktikPedagogis = Array.from({ length: numP }, (_, i) => {
+      const key = `praktikPedagogisP${i + 1}` as keyof typeof data;
+      const val = (data[key] as string) || (i % 2 === 0 ? 'Problem Based Learning (PBL)' : 'Project Based Learning (PjBL)');
+      return `• <b>Pertemuan ${i + 1}:</b> ${val}`;
+    }).join('<br>\n                  ');
+
+    const sintaksPedagogisStr = Array.from({ length: numP }, (_, i) => {
+      const key = `praktikPedagogisP${i + 1}` as keyof typeof data;
+      const val = (data[key] as string) || (i % 2 === 0 ? 'Problem Based Learning (PBL)' : 'Project Based Learning (PjBL)');
+      return `${val} (Pertemuan ${i + 1})`;
+    }).join(' &amp; ');
 
     return `
       <div class="modul-ajar-content deep-learning-rpm space-y-6" style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6;">
@@ -340,8 +368,7 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
               <tr>
                 <td style="padding: 7px 12px; border: 1px solid #a7f3d0; font-weight: bold; background-color: #f0fdf4;">Praktik Pedagogis per Pertemuan</td>
                 <td style="padding: 7px 12px; border: 1px solid #a7f3d0;">
-                  • <b>Pertemuan 1:</b> ${data.praktikPedagogisP1} (Orientasi Masalah, Investigasi Lapangan, Dekomposisi Solusi)<br>
-                  • <b>Pertemuan 2:</b> ${data.praktikPedagogisP2} (Perancangan Artefak, Uji Coba Model, Gelar Karya Smartboard)
+                  ${listPraktikPedagogis}
                 </td>
               </tr>
               <tr>
@@ -384,7 +411,7 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
             <thead>
               <tr style="background-color: #b45309; color: white;">
                 <th style="padding: 8px 12px; border: 1px solid #b45309; width: 22%;">Tahapan Alur</th>
-                <th style="padding: 8px 12px; border: 1px solid #b45309; width: 63%;">Aktivitas Rinci Pengalaman Belajar (Pertemuan 1 &amp; 2)</th>
+                <th style="padding: 8px 12px; border: 1px solid #b45309; width: 63%;">Aktivitas Rinci Pengalaman Belajar (Pertemuan 1 s.d. ${numP})</th>
                 <th style="padding: 8px 12px; border: 1px solid #b45309; width: 15%; text-align: center;">Durasi</th>
               </tr>
             </thead>
@@ -409,7 +436,7 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
                   B. KEGIATAN INTI<br><span style="color: #b45309;">(MENGAPLIKASI)</span>
                 </td>
                 <td style="padding: 8px 12px; border: 1px solid #fde68a;">
-                  • <b>Sintaks Model:</b> Penerapan model ${data.praktikPedagogisP1} (Pertemuan 1) &amp; ${data.praktikPedagogisP2} (Pertemuan 2).<br>
+                  • <b>Sintaks Model:</b> Penerapan model ${sintaksPedagogisStr}.<br>
                   • <b>Pengorganisasian Tim Riset:</b> Pembentukan kelompok heterogen (3-4 orang). Guru melakukan scaffolding adaptif pada kelompok yang membutuhkan bimbingan teknis.<br>
                   • <b>[Penguatan Literasi &amp; Numerasi]:</b> Setiap tim membedah lembar studi kasus, mengekstraksi variabel permasalahan (Literasi), serta menghitung matriks numerik / membuat tabel komparasi (Numerasi).<br>
                   • <b>[Pemanfaatan Papan Interaktif Digital]:</b> Perwakilan kelompok maju mengoperasikan Papan Interaktif Digital untuk memetakan diagram alir solusi, melakukan drag-and-drop komponen solusi, dan memvalidasi model bersama tim lain.<br>
@@ -746,78 +773,98 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Satuan Pendidikan *
+                <label className="block text-[11px] font-bold text-yellow-800 dark:text-yellow-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> Nama Satuan Pendidikan *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.namaSekolah}
                   onChange={(e) => setFormData({ ...formData, namaSekolah: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-yellow-50/80 dark:bg-yellow-950/40 border border-yellow-300 dark:border-yellow-600 rounded-lg text-xs font-semibold text-yellow-950 dark:text-yellow-100 placeholder-yellow-400 focus:ring-2 focus:ring-yellow-400 focus:outline-none shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Guru Pengampu *
+                <label className="block text-[11px] font-bold text-emerald-800 dark:text-emerald-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Nama Guru Pengampu *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.namaGuru}
                   onChange={(e) => setFormData({ ...formData, namaGuru: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-600 rounded-lg text-xs font-semibold text-emerald-950 dark:text-emerald-100 placeholder-emerald-400 focus:ring-2 focus:ring-emerald-400 focus:outline-none shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  NIP Guru *
+                <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> NIP Guru *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.nipGuru}
                   onChange={(e) => setFormData({ ...formData, nipGuru: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-600 rounded-lg text-xs font-semibold text-amber-950 dark:text-amber-100 placeholder-amber-400 focus:ring-2 focus:ring-amber-400 focus:outline-none shadow-sm"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Kepala Sekolah *
+                <label className="block text-[11px] font-bold text-emerald-800 dark:text-emerald-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span> Nama Kepala Sekolah *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.namaKepsek}
                   onChange={(e) => setFormData({ ...formData, namaKepsek: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-600 rounded-lg text-xs font-semibold text-emerald-950 dark:text-emerald-100 placeholder-emerald-400 focus:ring-2 focus:ring-emerald-400 focus:outline-none shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  NIP Kepala Sekolah *
+                <label className="block text-[11px] font-bold text-yellow-800 dark:text-yellow-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yellow-600 inline-block"></span> NIP Kepala Sekolah *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.nipKepsek}
                   onChange={(e) => setFormData({ ...formData, nipKepsek: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-yellow-50/80 dark:bg-yellow-950/40 border border-yellow-300 dark:border-yellow-600 rounded-lg text-xs font-semibold text-yellow-950 dark:text-yellow-100 placeholder-yellow-400 focus:ring-2 focus:ring-yellow-400 focus:outline-none shadow-sm"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Kota &amp; Tanggal Penetapan *
+                <label className="block text-[11px] font-bold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 inline-block"></span> Jumlah Pertemuan *
+                </label>
+                <select
+                  value={formData.jumlahPertemuan}
+                  onChange={(e) => setFormData({ ...formData, jumlahPertemuan: e.target.value })}
+                  className="w-full px-3 py-2 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-600 rounded-lg text-xs font-semibold text-blue-950 dark:text-blue-100 focus:ring-2 focus:ring-blue-400 focus:outline-none shadow-sm"
+                >
+                  <option value="1 Pertemuan">1 Pertemuan</option>
+                  <option value="2 Pertemuan">2 Pertemuan</option>
+                  <option value="3 Pertemuan">3 Pertemuan</option>
+                  <option value="4 Pertemuan">4 Pertemuan</option>
+                  <option value="6 Pertemuan">6 Pertemuan</option>
+                  <option value="8 Pertemuan">8 Pertemuan</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-amber-800 dark:text-amber-300 mb-1 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-600 inline-block"></span> Kota &amp; Tanggal Penetapan *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.kotaTanggal}
                   onChange={(e) => setFormData({ ...formData, kotaTanggal: e.target.value })}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs"
+                  className="w-full px-3 py-2 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-600 rounded-lg text-xs font-semibold text-amber-950 dark:text-amber-100 placeholder-amber-400 focus:ring-2 focus:ring-amber-400 focus:outline-none shadow-sm"
                 />
               </div>
             </div>
@@ -917,36 +964,44 @@ Format tanda tangan resmi Kepala Sekolah dan Guru Pengampu.`;
             </div>
           </div>
 
-          {/* Praktik Pedagogis Pertemuan 1 & 2 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Praktik Pedagogis Pertemuan 1
+          {/* Praktik Pedagogis Pertemuan (Dinamis Sesuai Pilihan Jumlah Pertemuan) */}
+          <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                Praktik Pedagogis ({parseInt(formData.jumlahPertemuan) || 2} Pertemuan Ditentukan)
               </label>
-              <select
-                value={formData.praktikPedagogisP1}
-                onChange={(e) => setFormData({ ...formData, praktikPedagogisP1: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-              >
-                <option value="Problem Based Learning (PBL)">Problem Based Learning (PBL)</option>
-                <option value="Inkuiri-Discovery Learning">Inkuiri-Discovery Learning</option>
-                <option value="Station Learning">Station Learning</option>
-              </select>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                Pilih model pembelajaran per pertemuan
+              </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Praktik Pedagogis Pertemuan 2
-              </label>
-              <select
-                value={formData.praktikPedagogisP2}
-                onChange={(e) => setFormData({ ...formData, praktikPedagogisP2: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
-              >
-                <option value="Project Based Learning (PjBL)">Project Based Learning (PjBL)</option>
-                <option value="Problem Solving Authentic">Problem Solving Authentic</option>
-                <option value="Case-Based Learning">Case-Based Learning</option>
-              </select>
+            <div className={`grid grid-cols-1 ${(parseInt(formData.jumlahPertemuan) || 2) > 1 ? 'md:grid-cols-2' : ''} gap-3`}>
+              {Array.from({ length: parseInt(formData.jumlahPertemuan) || 2 }, (_, i) => {
+                const pKey = `praktikPedagogisP${i + 1}` as keyof typeof formData;
+                const pVal = (formData[pKey] as string) || (i % 2 === 0 ? 'Problem Based Learning (PBL)' : 'Project Based Learning (PjBL)');
+                return (
+                  <div key={i} className="p-2.5 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-lg border border-emerald-200/80 dark:border-emerald-800/50 shadow-xs">
+                    <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
+                      Praktik Pedagogis Pertemuan {i + 1} *
+                    </label>
+                    <select
+                      value={pVal}
+                      onChange={(e) => setFormData({ ...formData, [pKey]: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-md text-xs font-medium text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    >
+                      <option value="Problem Based Learning (PBL)">Problem Based Learning (PBL)</option>
+                      <option value="Project Based Learning (PjBL)">Project Based Learning (PjBL)</option>
+                      <option value="Inkuiri-Discovery Learning">Inkuiri-Discovery Learning</option>
+                      <option value="Case-Based Learning">Case-Based Learning</option>
+                      <option value="Station Learning">Station Learning</option>
+                      <option value="Problem Solving Authentic">Problem Solving Authentic</option>
+                      <option value="Cooperative Learning (Jigsaw/STAD)">Cooperative Learning (Jigsaw/STAD)</option>
+                      <option value="Experiential Learning">Experiential Learning</option>
+                    </select>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
