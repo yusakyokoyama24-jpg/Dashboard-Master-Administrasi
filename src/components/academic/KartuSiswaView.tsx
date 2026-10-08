@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import JsBarcode from 'jsbarcode';
+import Swal from 'sweetalert2';
 import {
   Printer,
   Download,
@@ -26,7 +27,6 @@ import {
   User,
   GraduationCap,
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { Siswa, Pengaturan } from '../../types';
 import { dbService } from '../../services/db';
 import { showToast } from '../../utils/toast';
@@ -45,6 +45,22 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
   const [selectedKelas, setSelectedKelas] = useState<string>('all');
   const [selectedSiswaIds, setSelectedSiswaIds] = useState<string[]>([]);
   const [qrCodeUrls, setQrCodeUrls] = useState<Record<string, string>>({});
+  const [bullyingQrUrl, setBullyingQrUrl] = useState<string>('');
+  const [saranQrUrl, setSaranQrUrl] = useState<string>('');
+
+  useEffect(() => {
+    const origin = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
+    const bullyingUrl = origin + '?portal=bullying';
+    const saranUrl = origin + '?portal=saran';
+
+    QRCode.toDataURL(bullyingUrl, { width: 140, margin: 1, color: { dark: '#991b1b', light: '#FFFFFF' } })
+      .then((url) => setBullyingQrUrl(url))
+      .catch((e) => console.error(e));
+
+    QRCode.toDataURL(saranUrl, { width: 140, margin: 1, color: { dark: '#b45309', light: '#FFFFFF' } })
+      .then((url) => setSaranQrUrl(url))
+      .catch((e) => console.error(e));
+  }, []);
   const [cardsActivated, setCardsActivated] = useState<boolean>(true);
   const [printLayout, setPrintLayout] = useState<'8a4' | '4a4' | 'pvc'>('8a4');
   const [showPrintGuide, setShowPrintGuide] = useState<boolean>(false);
@@ -288,6 +304,32 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
     }, 200);
   };
 
+  const handleDownloadPdf = () => {
+    Swal.fire({
+      title: '📥 Unduh / Simpan Kartu A4 (PDF)',
+      html: `
+        <div class="text-left space-y-3 text-xs text-slate-600 dark:text-slate-300">
+          <p>Untuk mengunduh kartu siswa dalam format <b>PDF berkualitas vektor A4</b>:</p>
+          <ol class="list-decimal pl-4 space-y-1.5 font-medium">
+            <li>Klik tombol <b>Buka Dialog Cetak / PDF</b> di bawah.</li>
+            <li>Pada jendela printer yang muncul, pilih <b>Destination / Printer</b> ke: <span class="text-indigo-600 font-bold">Save as PDF / Simpan sebagai PDF</span>.</li>
+            <li>Pastikan <b>Layout</b> diatur ke <b>Portrait</b> dan <b>Margins</b> ke <b>None / Default</b>.</li>
+            <li>Klik <b>Save</b> untuk menyimpan berkas PDF ke perangkat Anda.</li>
+          </ol>
+        </div>
+      `,
+      icon: 'info',
+      showCancelButton: true,
+      confirmButtonText: 'Buka Dialog Cetak / PDF',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#4f46e5'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        handlePrintDirect();
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Controls Banner (Hidden in Print) */}
@@ -347,6 +389,16 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
             >
               <CheckCircle2 className="w-4 h-4" />
               Aktifkan Semua
+            </button>
+
+            {/* TOMBOL DOWNLOAD KARTU A4 (PDF) */}
+            <button
+              onClick={handleDownloadPdf}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95"
+              title="Unduh dan simpan kartu siswa dalam format lembar A4 PDF"
+            >
+              <Download className="w-4 h-4" />
+              Download Kartu A4 (PDF)
             </button>
 
             {/* TOMBOL UTAMA: PRINT LANGSUNG */}
@@ -785,35 +837,38 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
                       </div>
 
                       {/* Content */}
-                      <div className="p-3 grid grid-cols-12 gap-2.5 items-center">
-                        {/* High-res QR Code */}
-                        <div className="col-span-5 flex flex-col items-center justify-center gap-1">
-                          {qrCodeUrls[previewSiswa.id] ? (
-                            <img
-                              src={qrCodeUrls[previewSiswa.id]}
-                              alt="QR Siswa High Res"
-                              className="w-20 h-20 rounded-lg border-2 border-indigo-400 p-0.5 bg-white shadow-xs"
-                            />
-                          ) : (
-                            <div className="w-20 h-20 bg-slate-200 animate-pulse rounded-lg"></div>
-                          )}
-                          <span className="font-mono text-[9px] font-bold text-blue-700 text-center">
-                            NISN: {previewSiswa.nisn}
-                          </span>
+                      <div className="p-3 grid grid-cols-12 gap-2 items-center">
+                        {/* High-res 2 QR Codes (Bullying & Saran) */}
+                        <div className="col-span-6 grid grid-cols-2 gap-2 items-center justify-center">
+                          <div className="flex flex-col items-center">
+                            {bullyingQrUrl ? (
+                              <img src={bullyingQrUrl} alt="QR Bullying" className="w-16 h-16 rounded border border-rose-400 p-0.5 bg-white shadow-xs" />
+                            ) : (
+                              <div className="w-16 h-16 bg-slate-200 animate-pulse rounded"></div>
+                            )}
+                            <span className="text-[8px] font-bold text-rose-700 mt-1">Aduan Bully</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            {saranQrUrl ? (
+                              <img src={saranQrUrl} alt="QR Saran" className="w-16 h-16 rounded border border-amber-400 p-0.5 bg-white shadow-xs" />
+                            ) : (
+                              <div className="w-16 h-16 bg-slate-200 animate-pulse rounded"></div>
+                            )}
+                            <span className="text-[8px] font-bold text-amber-700 mt-1">Saran Sekolah</span>
+                          </div>
                         </div>
 
                         {/* Rules and Authorization */}
-                        <div className="col-span-7 text-left space-y-1">
-                          <p className="text-[9px] text-slate-600 dark:text-slate-300 leading-tight">
-                            <b>Ketentuan Kartu Pelajar:</b><br />
-                            1. Wajib dibawa saat presensi harian &amp; ujian.<br />
-                            2. Kartu tidak boleh dipindahtangankan.<br />
-                            3. Jika hilang, segera lapor ke pihak sekolah.
+                        <div className="col-span-6 text-left space-y-1">
+                          <p className="text-[8px] text-slate-600 dark:text-slate-300 leading-tight">
+                            <b>Scan QR Belakang untuk:</b><br />
+                            • Pengaduan Bullying (Rahasia &amp; Aman)<br />
+                            • Kotak Saran &amp; Masukan Sekolah
                           </p>
 
                           <div className="pt-1 border-t border-slate-200 text-[8px] text-slate-500">
                             <span>{pengaturan.kota}, Kepala Sekolah</span>
-                            <p className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                            <p className="font-bold text-slate-800 dark:text-slate-200">
                               {pengaturan.namaKepsek.split(',')[0]}
                             </p>
                           </div>
@@ -821,7 +876,7 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
                       </div>
 
                       <div className="bg-slate-100 px-2.5 py-1 border-t border-slate-200 text-center text-[8px] text-slate-500">
-                        Scan QR ini pada aplikasi Presensi Digital Sekolah
+                        Kartu Resmi Pelajar • Terhubung ke Portal Digital Sekolah
                       </div>
                     </div>
                   </div>

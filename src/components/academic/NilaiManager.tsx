@@ -542,14 +542,6 @@ export const NilaiManager: React.FC<NilaiManagerProps> = ({
             <FileSpreadsheet className="w-4 h-4" />
             Ekspor Excel
           </button>
-
-          <button
-            onClick={() => handleOpenAdd()}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl shadow-sm transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Input Nilai Siswa
-          </button>
         </div>
       </div>
 
@@ -895,9 +887,7 @@ export const NilaiManager: React.FC<NilaiManagerProps> = ({
                   Predikat
                 </th>
 
-                <th rowSpan={2} className="py-2 px-2 w-[16%] print:w-[16%] border border-slate-600 text-[11px] print:text-[9px]">
-                  Deskripsi Capaian Kompetensi
-                </th>
+
 
                 <th rowSpan={2} className="py-2 px-2 text-center border border-slate-600 w-16 text-xs no-print">
                   Aksi
@@ -921,7 +911,7 @@ export const NilaiManager: React.FC<NilaiManagerProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
               {displayedStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={showPresensiColumn ? 20 : 18} className="py-8 text-center text-slate-400">
+                  <td colSpan={showPresensiColumn ? 19 : 17} className="py-8 text-center text-slate-400">
                     Tidak ada siswa pada rombel {selectedKelas} dengan kriteria filter saat ini.
                   </td>
                 </tr>
@@ -1075,19 +1065,48 @@ export const NilaiManager: React.FC<NilaiManagerProps> = ({
                         return (
                           <td
                             key={sIdx}
-                            onClick={() => handleOpenAdd(s.id, sumatifNum)}
-                            className="py-1 px-0.5 text-center font-mono text-xs print:text-[8pt] cursor-pointer hover:bg-sky-50 dark:hover:bg-sky-950/40 border border-slate-200 dark:border-slate-800 print:border-slate-600 transition-colors"
-                            title={`Klik untuk mengedit Nilai Sumatif ${sumatifNum}`}
+                            className="py-0.5 px-0.5 text-center font-mono text-xs border border-slate-200 dark:border-slate-800 print:border-slate-600 bg-white dark:bg-slate-900"
                           >
-                            {score !== null ? (
-                              <span className="font-bold text-slate-800 dark:text-slate-200 print:text-slate-900">
-                                {score}
-                              </span>
-                            ) : (
-                              <span className="text-slate-300 dark:text-slate-600 print:text-slate-400 hover:text-blue-500 font-bold">
-                                -
-                              </span>
-                            )}
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              defaultValue={score !== null ? score : ''}
+                              key={`${s.id}-s${sumatifNum}-${score}`}
+                              onBlur={(e) => {
+                                const val = e.target.value.trim();
+                                const found = sumatifRecords.find(
+                                  (n) => n.sumatifKe === sumatifNum || n.materi?.toLowerCase().includes(`sumatif ${sumatifNum}`)
+                                );
+                                if (val === '') {
+                                  if (found) {
+                                    dbService.deleteNilai(found.id);
+                                    showToast('Nilai Dikosongkan', 'info', `Nilai S${sumatifNum} ${s.nama} dihapus.`);
+                                  }
+                                } else {
+                                  const num = Number(val);
+                                  if (!isNaN(num) && num >= 0 && num <= 100) {
+                                    const item: Nilai = {
+                                      id: found ? found.id : `n_${Date.now()}_${s.id}_s${sumatifNum}`,
+                                      siswaId: s.id,
+                                      namaSiswa: s.nama,
+                                      kelas: s.kelas || selectedKelas,
+                                      mapelId: selectedMapelId,
+                                      namaMapel: mapelList.find((m) => m.id === selectedMapelId)?.nama || 'Mapel',
+                                      jenis: 'sumatif',
+                                      sumatifKe: sumatifNum,
+                                      materi: found?.materi || `Sumatif ${sumatifNum}: Lingkup Materi ${sumatifNum}`,
+                                      skor: num,
+                                      semester: 'Ganjil 2026/2027',
+                                      userId: 'master_guru_default',
+                                    };
+                                    dbService.saveNilai(item);
+                                    showToast('Tersimpan', 'success', `S${sumatifNum} ${s.nama} (${num})`);
+                                  }
+                                }
+                              }}
+                              className="w-11 h-7 text-center font-mono text-xs font-bold bg-transparent text-slate-800 dark:text-slate-200 focus:bg-sky-50 focus:dark:bg-sky-950 focus:ring-1 focus:ring-sky-500 rounded border border-transparent hover:border-slate-200 dark:hover:border-slate-700 outline-none transition-all print:border-none print:bg-transparent"
+                            />
                           </td>
                         );
                       })}
@@ -1098,8 +1117,49 @@ export const NilaiManager: React.FC<NilaiManagerProps> = ({
                       </td>
 
                       {/* Nilai SAS (20%) */}
-                      <td className="py-1.5 px-1 text-center font-mono font-medium border border-slate-200 dark:border-slate-800 print:border-slate-600 text-xs print:text-[8pt]">
-                        {avgPas || '-'}
+                      <td className="py-0.5 px-0.5 text-center font-mono text-xs border border-slate-200 dark:border-slate-800 print:border-slate-600 bg-white dark:bg-slate-900">
+                        {(() => {
+                          const pasRecord = studentGrades.find((n) => n.jenis === 'pas');
+                          const currentPasScore = pasRecord ? pasRecord.skor : (avgPas > 0 ? avgPas : '');
+                          return (
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              defaultValue={currentPasScore !== '' ? currentPasScore : ''}
+                              key={`${s.id}-pas-${currentPasScore}`}
+                              onBlur={(e) => {
+                                const val = e.target.value.trim();
+                                if (val === '') {
+                                  if (pasRecord) {
+                                    dbService.deleteNilai(pasRecord.id);
+                                    showToast('Nilai SAS Dikosongkan', 'info', `Nilai SAS ${s.nama} dihapus.`);
+                                  }
+                                } else {
+                                  const num = Number(val);
+                                  if (!isNaN(num) && num >= 0 && num <= 100) {
+                                    const item: Nilai = {
+                                      id: pasRecord ? pasRecord.id : `n_${Date.now()}_${s.id}_pas`,
+                                      siswaId: s.id,
+                                      namaSiswa: s.nama,
+                                      kelas: s.kelas || selectedKelas,
+                                      mapelId: selectedMapelId,
+                                      namaMapel: mapelList.find((m) => m.id === selectedMapelId)?.nama || 'Mapel',
+                                      jenis: 'pas',
+                                      materi: pasRecord?.materi || 'Sumatif Akhir Semester (SAS)',
+                                      skor: num,
+                                      semester: 'Ganjil 2026/2027',
+                                      userId: 'master_guru_default',
+                                    };
+                                    dbService.saveNilai(item);
+                                    showToast('Tersimpan', 'success', `SAS ${s.nama} (${num})`);
+                                  }
+                                }
+                              }}
+                              className="w-12 h-7 text-center font-mono text-xs font-bold bg-transparent text-slate-800 dark:text-slate-200 focus:bg-blue-50 focus:dark:bg-blue-950 focus:ring-1 focus:ring-blue-500 rounded border border-transparent hover:border-slate-200 dark:hover:border-slate-700 outline-none transition-all print:border-none print:bg-transparent"
+                            />
+                          );
+                        })()}
                       </td>
 
                       {/* Nilai Akhir */}
@@ -1116,10 +1176,7 @@ export const NilaiManager: React.FC<NilaiManagerProps> = ({
                         </span>
                       </td>
 
-                      {/* Deskripsi Capaian */}
-                      <td className="py-1.5 px-2 text-[11px] print:text-[7pt] text-slate-600 dark:text-slate-400 print:text-slate-800 leading-tight border border-slate-200 dark:border-slate-800 print:border-slate-600">
-                        {deskripsi}
-                      </td>
+
 
                       {/* Aksi (Hidden in Print) */}
                       <td className="py-1.5 px-1 text-center no-print border border-slate-200 dark:border-slate-800">

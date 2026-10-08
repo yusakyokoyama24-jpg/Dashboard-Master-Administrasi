@@ -29,6 +29,11 @@ import {
   History,
   UserCheck,
   RefreshCw,
+  Eye,
+  MessageSquare,
+  Send,
+  Star,
+  Heart,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -47,8 +52,9 @@ import {
 } from 'recharts';
 import Swal from 'sweetalert2';
 import { showToast } from '../../utils/toast';
-import { Siswa, Mapel, Jadwal, Absensi, Nilai, Agenda, Pengaturan } from '../../types';
+import { Siswa, Mapel, Jadwal, Absensi, Nilai, Agenda, Pengaturan, VisitorStats, KomentarPengunjung } from '../../types';
 import { dbService } from '../../services/db';
+import { visitorCommentService } from '../../services/visitorCommentService';
 
 interface DashboardOverviewProps {
   siswaList: Siswa[];
@@ -79,6 +85,61 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   const [tempSchoolName, setTempSchoolName] = useState(pengaturan.namaSekolah);
   const [tempPhotoUrl, setTempPhotoUrl] = useState(pengaturan.fotoProfil || '');
   const [logFilter, setLogFilter] = useState<'semua' | 'presensi' | 'nilai' | 'agenda' | 'ai'>('semua');
+
+  // Visitor & Comments states
+  const [visitorStats, setVisitorStats] = useState<VisitorStats>(() => visitorCommentService.getCachedStats());
+  const [recentComments, setRecentComments] = useState<KomentarPengunjung[]>([]);
+  const [quickNama, setQuickNama] = useState('');
+  const [quickInstansi, setQuickInstansi] = useState('');
+  const [quickKomentar, setQuickKomentar] = useState('');
+  const [quickRating, setQuickRating] = useState(5);
+  const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
+
+  React.useEffect(() => {
+    visitorCommentService.getStats().then(setVisitorStats);
+    visitorCommentService.getComments().then(setRecentComments);
+  }, []);
+
+  const handleQuickSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickNama.trim() || !quickKomentar.trim()) {
+      showToast('Nama dan komentar wajib diisi!', 'error');
+      return;
+    }
+    setIsQuickSubmitting(true);
+    try {
+      const added = await visitorCommentService.addComment({
+        nama: quickNama.trim(),
+        instansi: quickInstansi.trim() || 'Satuan Pendidikan',
+        role: 'Guru / Pengunjung Portal',
+        komentar: quickKomentar.trim(),
+        rating: quickRating,
+        emoji: '🌟',
+      });
+      setRecentComments((prev) => [added, ...prev]);
+      setQuickKomentar('');
+      showToast('Komentar berhasil dipublikasikan!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Gagal mengirim komentar', 'error');
+    } finally {
+      setIsQuickSubmitting(false);
+    }
+  };
+
+  const handleLikeRecentComment = async (id: string) => {
+    const target = recentComments.find((c) => c.id === id);
+    if (!target) return;
+    if (target.likedByMe) {
+      showToast('Anda sudah memberikan apresiasi untuk komentar ini.', 'info');
+      return;
+    }
+
+    setRecentComments((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, likes: c.likes + 1, likedByMe: true } : c))
+    );
+    await visitorCommentService.likeComment(id);
+    showToast('Apresiasi terkirim! 👍', 'success');
+  };
 
   // Current day in Indonesian
   const dayIndex = new Date().getDay();
@@ -899,7 +960,243 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         </div>
       </div>
 
-      {/* MODAL 1: UBAH NAMA SEKOLAH SECARA MANUAL */}
+      {/* PENGHITUNG PENGUNJUNG & BUKU TAMU / KOMENTAR SECTION */}
+      <div className="bg-white dark:bg-slate-900 border-2 border-blue-400 dark:border-blue-700 rounded-3xl p-6 shadow-xl space-y-6">
+        {/* Header Widget */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md">
+              <Eye className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-base text-slate-900 dark:text-white uppercase tracking-tight">
+                  Penghitung Pengunjung & Buku Tamu Guru
+                </h3>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/30">
+                  LIVE REAL-TIME
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Statistik kunjungan dan ruang interaktif apresiasi dari rekan pendidik nusantara
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigate('buku-tamu')}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Buka Semua Buku Tamu
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 3 Metric Ribbon Tiles */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="p-4 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-extrabold text-blue-800 dark:text-blue-300 uppercase tracking-wider block">
+                Total Kunjungan
+              </span>
+              <span className="text-2xl font-black font-mono text-blue-950 dark:text-white">
+                {visitorStats.totalVisitors.toLocaleString('id-ID')}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-blue-600 text-white shadow-sm">
+              <Eye className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block">
+                Kunjungan Hari Ini
+              </span>
+              <span className="text-2xl font-black font-mono text-emerald-950 dark:text-white">
+                {visitorStats.todayVisitors.toLocaleString('id-ID')}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-sm">
+              <Calendar className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-extrabold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
+                Ulasan & Komentar
+              </span>
+              <span className="text-2xl font-black font-mono text-amber-950 dark:text-white">
+                {recentComments.length} Ulasan
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shadow-sm">
+              <MessageSquare className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Two Columns: Quick Comment Form (Kiri) & Recent Comments Stream (Kanan) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Quick Comment Box */}
+          <div className="lg:col-span-5 bg-slate-50 dark:bg-slate-800/60 p-5 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-4">
+            <div className="flex items-center gap-2">
+              <Send className="w-4 h-4 text-blue-600" />
+              <h4 className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-tight">
+                Tambah Komentar Cepat
+              </h4>
+            </div>
+
+            <form onSubmit={handleQuickSubmit} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nama Anda *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={quickNama}
+                  onChange={(e) => setQuickNama(e.target.value)}
+                  placeholder="Nama Lengkap / Gelar"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Sekolah / Asal Instansi
+                </label>
+                <input
+                  type="text"
+                  value={quickInstansi}
+                  onChange={(e) => setQuickInstansi(e.target.value)}
+                  placeholder="Misal: SMKN 1 Surabaya / SMPN 2 Jakarta"
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    Rating Bintang
+                  </label>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        type="button"
+                        key={s}
+                        onClick={() => setQuickRating(s)}
+                        className="text-amber-400 hover:scale-125 transition-transform"
+                      >
+                        <Star className={`w-4 h-4 ${s <= quickRating ? 'fill-amber-400' : 'text-slate-300'}`} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Pesan Komentar / Masukan *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={quickKomentar}
+                  onChange={(e) => setQuickKomentar(e.target.value)}
+                  placeholder="Tuliskan pengalaman atau saran Anda mengenai aplikasi ini..."
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isQuickSubmitting}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {isQuickSubmitting ? 'Mengirim...' : 'Kirim Komentar'}
+              </button>
+            </form>
+          </div>
+
+          {/* Recent Comments Stream */}
+          <div className="lg:col-span-7 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                Komentar & Testimoni Terbaru ({recentComments.slice(0, 3).length} dari {recentComments.length})
+              </span>
+              <button
+                onClick={() => onNavigate('buku-tamu')}
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              >
+                Lihat Selengkapnya <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {recentComments.slice(0, 3).map((comm) => (
+              <div
+                key={comm.id}
+                className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/70 rounded-2xl space-y-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${
+                        comm.avatarColor || 'from-blue-600 to-indigo-700'
+                      } text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm`}
+                    >
+                      {comm.nama.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h5 className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
+                          {comm.nama}
+                        </h5>
+                        <span className="text-xs">{comm.emoji || '✨'}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                        {comm.role} • {comm.instansi}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800/40 shrink-0">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <span className="text-[11px] font-black text-amber-700 dark:text-amber-300">
+                      {comm.rating}.0
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium bg-white/70 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                  "{comm.komentar}"
+                </p>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                  <span>{new Date(comm.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  <button
+                    onClick={() => handleLikeRecentComment(comm.id)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition-all border ${
+                      comm.likedByMe
+                        ? 'bg-rose-500 text-white border-rose-500'
+                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-rose-500'
+                    }`}
+                  >
+                    <Heart className={`w-3 h-3 ${comm.likedByMe ? 'fill-white' : ''}`} />
+                    <span>{comm.likes}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {isEditSchoolModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 relative">

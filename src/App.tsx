@@ -34,11 +34,17 @@ import {
   Building2,
   Upload,
   Check,
+  Eye,
+  MessageSquare,
+  Briefcase,
+  ShieldAlert,
+  Lightbulb,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { dbService } from './services/db';
+import { visitorCommentService } from './services/visitorCommentService';
 import { showToast } from './utils/toast';
-import { Siswa, Mapel, Jadwal, Absensi, Nilai, Agenda, Bimbingan, Pengaturan, UserSession } from './types';
+import { Siswa, Mapel, Jadwal, Absensi, Nilai, Agenda, Bimbingan, Pengaturan, UserSession, VisitorStats } from './types';
 
 // Academic Components
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
@@ -50,6 +56,13 @@ import { NilaiManager } from './components/academic/NilaiManager';
 import { AgendaManager } from './components/academic/AgendaManager';
 import { BimbinganManager } from './components/academic/BimbinganManager';
 import { DownloadPerangkat } from './components/academic/DownloadPerangkat';
+import { PklMonitoringDashboard } from './components/pkl/PklMonitoringDashboard';
+import { PortalPresensiSiswaPkl } from './components/pkl/PortalPresensiSiswaPkl';
+import { PklWhatsappParentReport } from './components/pkl/PklWhatsappParentReport';
+import { PortalPengaduanBullying } from './components/bullying/PortalPengaduanBullying';
+import { BullyingMonitoringDashboard } from './components/bullying/BullyingMonitoringDashboard';
+import { PortalSaranSiswa } from './components/saran/PortalSaranSiswa';
+import { SaranMonitoringDashboard } from './components/saran/SaranMonitoringDashboard';
 
 // AI Suite Components
 import { ModulAjarGenerator } from './components/ai/ModulAjarGenerator';
@@ -63,7 +76,8 @@ import { PptGenerator } from './components/ai/PptGenerator';
 import { ChatAsistenGuru } from './components/ai/ChatAsistenGuru';
 import { MediaInteraktifGenerator } from './components/ai/MediaInteraktifGenerator';
 
-// Reports & Settings Components
+// Guestbook, Reports & Settings Components
+import { BukuTamuKomentar } from './components/comments/BukuTamuKomentar';
 import { PusatLaporan } from './components/reports/PusatLaporan';
 import { PengaturanManager } from './components/settings/PengaturanManager';
 import { LoginModal } from './components/auth/LoginModal';
@@ -93,6 +107,7 @@ export default function App() {
   const [agendaList, setAgendaList] = useState<Agenda[]>([]);
   const [bimbinganList, setBimbinganList] = useState<Bimbingan[]>([]);
   const [pengaturan, setPengaturan] = useState<Pengaturan>(() => dbService.getPengaturan());
+  const [visitorStats, setVisitorStats] = useState<VisitorStats>(() => visitorCommentService.getCachedStats());
 
   const refreshData = () => {
     setSiswaList(dbService.getSiswa());
@@ -109,6 +124,7 @@ export default function App() {
   useEffect(() => {
     dbService.init();
     refreshData();
+    visitorCommentService.recordVisit().then((st) => setVisitorStats(st));
     const unsubscribe = dbService.subscribe(refreshData);
     return () => unsubscribe();
   }, []);
@@ -141,6 +157,22 @@ export default function App() {
     });
   };
 
+  // Check if student portal access via URL query parameter
+  const isPortalPkl = typeof window !== 'undefined' && window.location.search.includes('portal=pkl');
+  if (isPortalPkl) {
+    return <PortalPresensiSiswaPkl siswaList={siswaList} />;
+  }
+
+  const isPortalBullying = typeof window !== 'undefined' && window.location.search.includes('portal=bullying');
+  if (isPortalBullying) {
+    return <PortalPengaduanBullying siswaList={siswaList} pengaturan={pengaturan} />;
+  }
+
+  const isPortalSaran = typeof window !== 'undefined' && window.location.search.includes('portal=saran');
+  if (isPortalSaran) {
+    return <PortalSaranSiswa siswaList={siswaList} pengaturan={pengaturan} />;
+  }
+
   // If not logged in, show Login Screen
   if (!currentUser) {
     return <LoginModal onLoginSuccess={(u) => setCurrentUser(u)} />;
@@ -158,7 +190,9 @@ export default function App() {
       iconActive: 'bg-white text-blue-700 font-black',
       iconInactive: 'bg-blue-200 dark:bg-blue-900 text-blue-800 dark:text-blue-200',
       accentColor: '#2563eb',
-      items: [{ id: 'dashboard', label: 'Dashboard Utama', icon: LayoutDashboard }],
+      items: [
+        { id: 'dashboard', label: 'Dashboard Utama', icon: LayoutDashboard },
+      ],
     },
     {
       groupTitle: 'MENU AKADEMIK',
@@ -216,6 +250,9 @@ export default function App() {
         { id: 'agenda', label: 'Jurnal Agenda Mengajar', icon: BookMarked },
         { id: 'bimbingan', label: 'Bimbingan Wali / BK', icon: HeartHandshake },
         { id: 'perangkat-unduh', label: 'Unduh Perangkat Ajar', icon: FolderDown },
+        { id: 'pkl', label: 'Pemantauan Murid PKL', icon: Briefcase, badge: 'PKL', colorBadge: 'ORANGE' },
+        { id: 'pkl-whatsapp', label: 'Laporan PKL ke Orang Tua (WA)', icon: MessageSquare, badge: 'WA', colorBadge: 'HIJAU' },
+        { id: 'bullying', label: 'Pengaduan Bullying', icon: ShieldAlert, badge: 'SOS', colorBadge: 'ROSE' },
       ],
     },
     {
@@ -254,6 +291,8 @@ export default function App() {
       items: [
         { id: 'laporan', label: 'Pusat Laporan & Cetak', icon: FileText },
         { id: 'pengaturan', label: 'Pengaturan & Database', icon: Settings },
+        { id: 'saran', label: 'Saran & Masukan Sekolah', icon: Lightbulb, badge: 'SARAN', colorBadge: 'ORANGE' },
+        { id: 'buku-tamu', label: 'Buku Tamu & Komentar', icon: MessageSquare, badge: 'HOT' },
       ],
     },
   ];
@@ -306,7 +345,7 @@ export default function App() {
                   TONGGURU YUSAK YOKOYAMA
                 </span>
                 <p className="text-[10px] sm:text-[11px] text-blue-200 hidden sm:block truncate max-w-sm font-semibold mt-0.5">
-                  {pengaturan.namaSekolah} • {pengaturan.namaGuru.split(',')[0]}
+                  {pengaturan.namaSekolah}
                 </p>
               </div>
             </div>
@@ -329,6 +368,23 @@ export default function App() {
                 🟨 KUNING
               </span>
             </div>
+
+            {/* Live Visitor Counter Badge */}
+            <button
+              onClick={() => setActiveTab('buku-tamu')}
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-900/80 hover:bg-blue-800 text-white border border-blue-400/40 shadow-sm transition-all group"
+              title="Statistik Pengunjung & Buku Tamu (Klik untuk membuka)"
+            >
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <Eye className="w-3.5 h-3.5 text-blue-300 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="text-xs font-mono font-black text-amber-300">
+                {visitorStats.totalVisitors.toLocaleString('id-ID')}
+              </span>
+              <span className="text-[10px] text-blue-200 hidden xl:inline font-bold">Kunjungan</span>
+            </button>
 
             {/* Dark Mode Toggle */}
             <button
@@ -541,6 +597,10 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'buku-tamu' && (
+              <BukuTamuKomentar onBackToDashboard={() => setActiveTab('dashboard')} />
+            )}
+
             {activeTab === 'siswa' && (
               <SiswaManager
                 siswaList={siswaList}
@@ -600,6 +660,33 @@ export default function App() {
             )}
 
             {activeTab === 'perangkat-unduh' && <DownloadPerangkat />}
+            {activeTab === 'pkl' && (
+              <PklMonitoringDashboard
+                siswaList={siswaList}
+                pengaturan={pengaturan}
+                onOpenStudentPortal={() => {
+                  window.open(window.location.origin + window.location.pathname + '?portal=pkl', '_blank');
+                }}
+              />
+            )}
+
+            {activeTab === 'pkl-whatsapp' && (
+              <PklWhatsappParentReport siswaList={siswaList} pengaturan={pengaturan} />
+            )}
+
+            {activeTab === 'bullying' && (
+              <BullyingMonitoringDashboard pengaturan={pengaturan} />
+            )}
+
+            {activeTab === 'saran' && (
+              <SaranMonitoringDashboard
+                siswaList={siswaList}
+                pengaturan={pengaturan}
+                onOpenStudentPortal={() => {
+                  window.open(window.location.origin + window.location.pathname + '?portal=saran', '_blank');
+                }}
+              />
+            )}
 
             {/* AI Suite Modules */}
             {activeTab === 'ai-modul' && <ModulAjarGenerator />}

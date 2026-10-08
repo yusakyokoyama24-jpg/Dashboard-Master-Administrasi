@@ -1,0 +1,100 @@
+{
+  "visitors": {
+    "totalVisitors": 1549,
+    "todayVisitors": 165,
+    "uniqueVisitors": 993,
+    "lastDate": "2026-10-08",
+    "weeklyTrend": [
+      {
+        "day": "Sen",
+        "count": 210
+      },
+      {
+        "day": "Sel",
+        "count": 245
+      },
+      {
+        "day": "Rab",
+        "count": 280
+      },
+      {
+        "day": "Kam",
+        "count": 195
+      },
+      {
+        "day": "Jum",
+        "count": 230
+      },
+      {
+        "day": "Sab",
+        "count": 224
+      },
+      {
+        "day": "Min",
+        "count": 164
+      }
+    ]
+  },
+  "comments": [
+    {
+      "id": "c_1791438362226_lvz3",
+      "nama": "Ahmad Zaki, M.Kom.",
+      "instansi": "SMKN 5 Bandung",
+      "role": "Guru Produktif",
+      "komentar": "Sistem administrasi guru yang sangat interaktif dan responsif!",
+      "rating": 5,
+      "emoji": "🚀",
+      "likes": 1,
+      "createdAt": "2026-10-08T05:46:02.226Z",
+      "avatarColor": "from-rose-500 to-red-700"
+    },
+    {
+      "id": "c_001",
+      "nama": "Dra. Hj. Sri Endang Wahyuni, M.Pd.",
+      "instansi": "Dinas Pendidikan & Pengawas SMK",
+      "role": "Pengawas Sekolah",
+      "komentar": "Aplikasi dashboard administrasi Tongguru Yusak Yokoyama ini sangat luar biasa dan visioner! Struktur Rencana Pembelajaran Mendalam (RPM) sesuai SK Kepala BSKAP No. 046/H/KR/2025 tersaji dengan sangat komprehensif, mulai dari apersepsi bermakna, diferensiasi konten/proses, hingga rubrik asesmen autentik. Sangat membantu supervisi guru binaan.",
+      "rating": 5,
+      "emoji": "🌟",
+      "likes": 38,
+      "createdAt": "2026-10-06T05:45:45.745Z",
+      "avatarColor": "from-emerald-500 to-teal-700"
+    },
+    {
+      "id": "c_002",
+      "nama": "Budi Santoso, S.Kom., Gr.",
+      "instansi": "SMK Negeri 2 Surabaya",
+      "role": "Guru Kejuruan RPL & Informatika",
+      "komentar": "Fitur Presensi Siswa Kamera QR terintegrasi langsung dengan Leger Rapor dan rekapitulasi bulanan otomatis. Terlebih generator LKPD dan media pembelajaran interaktifnya sangat memangkas beban administratif guru. Sangat menginspirasi!",
+      "rating": 5,
+      "emoji": "🔥",
+      "likes": 29,
+      "createdAt": "2026-10-07T05:45:45.745Z",
+      "avatarColor": "from-blue-600 to-indigo-800"
+    },
+    {
+      "id": "c_003",
+      "nama": "Nurul Hidayati, S.Pd.",
+      "instansi": "SMA Negeri 1 Semarang",
+      "role": "Wali Kelas & Guru Mapel",
+      "komentar": "Tampilan antarmuka sangat rapi dengan menu warna blok tajam (Biru, Hijau, Orange, Kuning) yang memudahkan navigasi. Cetak kartu siswa dengan barcode dan catatan jurnal agenda harian sangat praktis digunakan.",
+      "rating": 5,
+      "emoji": "❤️",
+      "likes": 22,
+      "createdAt": "2026-10-08T00:45:45.745Z",
+      "avatarColor": "from-purple-600 to-pink-700"
+    },
+    {
+      "id": "c_004",
+      "nama": "Drs. H. Mulyadi, M.M.",
+      "instansi": "SMK Swasta Teladan Mandiri",
+      "role": "Kepala Sekolah",
+      "komentar": "Inovasi tata kelola administrasi guru yang sangat membanggakan dari Pak Yusak Yokoyama. Kami rekomendasikan untuk diimplementasikan oleh seluruh dewan guru.",
+      "rating": 5,
+      "emoji": "👏",
+      "likes": 17,
+      "createdAt": "2026-10-08T03:45:45.745Z",
+      "avatarColor": "from-amber-500 to-orange-700"
+    }
+  ]
+}

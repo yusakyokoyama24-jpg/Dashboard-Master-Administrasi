@@ -138,3 +138,110 @@ export interface LogAktivitas {
   waktu: string;
   timestamp: number;
 }
+
+export interface VisitorStats {
+  totalVisitors: number;
+  todayVisitors: number;
+  uniqueVisitors: number;
+  lastUpdated: string;
+  weeklyTrend?: { day: string; count: number }[];
+}
+
+export interface KomentarPengunjung {
+  id: string;
+  nama: string;
+  instansi: string;
+  role: string;
+  komentar: string;
+  rating: number; // 1 to 5
+  emoji?: string;
+  likes: number;
+  createdAt: string;
+  avatarColor?: string;
+  likedByMe?: boolean;
+}
+
+export interface PresensiPkl {
+  id: string;
+  tanggal: string; // YYYY-MM-DD
+  siswaId: string;
+  nisn: string;
+  namaSiswa: string;
+  kelas: string;
+  namaDudi: string; // Nama Instansi / Perusahaan PKL
+  alamatDudi?: string;
+  guruPembimbing?: string;
+
+  // Waktu Datang (Wajib saat Check-in pertama)
+  waktuDatang: string; // HH:mm:ss
+  timestampDatang: number;
+  fotoDatang: string; // Base64 image with burned watermark (tanggal + waktu)
+  keteranganDatang?: string;
+  lokasiDatang?: string;
+  latitudeDatang?: number;
+  longitudeDatang?: number;
+  akurasiDatang?: number;
+
+  // Waktu Pulang (Bisa kosong saat awal kirim)
+  waktuPulang?: string; // HH:mm:ss
+  timestampPulang?: number;
+  fotoPulang?: string; // Base64 image with burned watermark (tanggal + waktu)
+  keteranganPulang?: string;
+  ringkasanPekerjaan?: string; // Jurnal singkat kegiatan PKL hari ini
+  latitudePulang?: number;
+  longitudePulang?: number;
+  akurasiPulang?: number;
+
+  status: 'masih_pkl' | 'selesai_pulang' | 'izin' | 'sakit';
+  verifiedByTeacher?: boolean;
+  catatanGuru?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TempatPkl {
+  id: string;
+  namaDudi: string;
+  bidangUsaha: string;
+  alamat: string;
+  pembimbingDudi: string;
+  kontakPembimbing: string;
+  guruPembimbing: string;
+}
+
+export interface BullyingReport {
+  id: string;
+  tanggal: string; // YYYY-MM-DD
+  waktu: string;   // HH:mm
+  pelaporNama?: string;
+  pelaporKelas?: string;
+  pelaporNisn?: string;
+  isAnonymous: boolean;
+  jenisBullying: 'Fisik' | 'Verbal' | 'Siber (Cyberbullying)' | 'Sosial / Pengucilan' | 'Intimidasi / Ancaman' | 'Lainnya';
+  lokasiKejadian: string;
+  deskripsi: string;
+  pihakTerlibat?: string;
+  buktiFoto?: string;
+  status: 'Menunggu Penanganan' | 'Sedang Ditindaklanjuti' | 'Selesai Ditangani';
+  catatanGuru?: string;
+  createdAt: string;
+}
+
+export interface SaranMasukan {
+  id: string;
+  tanggal: string; // YYYY-MM-DD
+  waktu: string;   // HH:mm
+  pengirimNama?: string;
+  pengirimKelas?: string;
+  pengirimNisn?: string;
+  isAnonymous: boolean;
+  kategori: 'Fasilitas Sekolah' | 'Kurikulum & Pembelajaran' | 'Ekstrakurikuler' | 'Kebersihan & Lingkungan' | 'Kantin & Kantin Kejujuran' | 'Lainnya';
+  judul: string;
+  pesan: string;
+  rating?: number; // 1-5
+  status: 'Baru' | 'Dibaca' | 'Diproses' | 'Selesai / Diterapkan';
+  catatanGuru?: string;
+  createdAt: string;
+}
+
+

@@ -1,15 +1,16 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // Initialize Google Gen AI SDK
 const getAiClient = () => {
@@ -103,6 +104,661 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 
   // Also support custom user credentials passed from client if saved locally
   return res.status(401).json({ error: 'Kredensial tidak valid! Silakan periksa kembali username dan password Anda.' });
+});
+
+// ==========================================
+// VISITOR COUNTER & COMMENT DATA STORAGE
+// ==========================================
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const GUESTBOOK_FILE = path.join(DATA_DIR, 'guestbook_stats.json');
+
+interface VisitorData {
+  totalVisitors: number;
+  todayVisitors: number;
+  uniqueVisitors: number;
+  lastDate: string;
+  weeklyTrend: { day: string; count: number }[];
+}
+
+interface CommentData {
+  id: string;
+  nama: string;
+  instansi: string;
+  role: string;
+  komentar: string;
+  rating: number;
+  emoji?: string;
+  likes: number;
+  createdAt: string;
+  avatarColor?: string;
+}
+
+interface GuestbookStorage {
+  visitors: VisitorData;
+  comments: CommentData[];
+}
+
+const DEFAULT_GUESTBOOK: GuestbookStorage = {
+  visitors: {
+    totalVisitors: 1548,
+    todayVisitors: 164,
+    uniqueVisitors: 992,
+    lastDate: new Date().toISOString().split('T')[0],
+    weeklyTrend: [
+      { day: 'Sen', count: 210 },
+      { day: 'Sel', count: 245 },
+      { day: 'Rab', count: 280 },
+      { day: 'Kam', count: 195 },
+      { day: 'Jum', count: 230 },
+      { day: 'Sab', count: 224 },
+      { day: 'Min', count: 164 },
+    ],
+  },
+  comments: [
+    {
+      id: 'c_001',
+      nama: 'Dra. Hj. Sri Endang Wahyuni, M.Pd.',
+      instansi: 'Dinas Pendidikan & Pengawas SMK',
+      role: 'Pengawas Sekolah',
+      komentar: 'Aplikasi dashboard administrasi Tongguru Yusak Yokoyama ini sangat luar biasa dan visioner! Struktur Rencana Pembelajaran Mendalam (RPM) sesuai SK Kepala BSKAP No. 046/H/KR/2025 tersaji dengan sangat komprehensif, mulai dari apersepsi bermakna, diferensiasi konten/proses, hingga rubrik asesmen autentik. Sangat membantu supervisi guru binaan.',
+      rating: 5,
+      emoji: '🌟',
+      likes: 38,
+      createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+      avatarColor: 'from-emerald-500 to-teal-700',
+    },
+    {
+      id: 'c_002',
+      nama: 'Budi Santoso, S.Kom., Gr.',
+      instansi: 'SMK Negeri 2 Surabaya',
+      role: 'Guru Kejuruan RPL & Informatika',
+      komentar: 'Fitur Presensi Siswa Kamera QR terintegrasi langsung dengan Leger Rapor dan rekapitulasi bulanan otomatis. Terlebih generator LKPD dan media pembelajaran interaktifnya sangat memangkas beban administratif guru. Sangat menginspirasi!',
+      rating: 5,
+      emoji: '🔥',
+      likes: 29,
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      avatarColor: 'from-blue-600 to-indigo-800',
+    },
+    {
+      id: 'c_003',
+      nama: 'Nurul Hidayati, S.Pd.',
+      instansi: 'SMA Negeri 1 Semarang',
+      role: 'Wali Kelas & Guru Mapel',
+      komentar: 'Tampilan antarmuka sangat rapi dengan menu warna blok tajam (Biru, Hijau, Orange, Kuning) yang memudahkan navigasi. Cetak kartu siswa dengan barcode dan catatan jurnal agenda harian sangat praktis digunakan.',
+      rating: 5,
+      emoji: '❤️',
+      likes: 22,
+      createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+      avatarColor: 'from-purple-600 to-pink-700',
+    },
+    {
+      id: 'c_004',
+      nama: 'Drs. H. Mulyadi, M.M.',
+      instansi: 'SMK Swasta Teladan Mandiri',
+      role: 'Kepala Sekolah',
+      komentar: 'Inovasi tata kelola administrasi guru yang sangat membanggakan dari Pak Yusak Yokoyama. Kami rekomendasikan untuk diimplementasikan oleh seluruh dewan guru.',
+      rating: 5,
+      emoji: '👏',
+      likes: 17,
+      createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+      avatarColor: 'from-amber-500 to-orange-700',
+    },
+  ],
+};
+
+function readGuestbookData(): GuestbookStorage {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(GUESTBOOK_FILE)) {
+      fs.writeFileSync(GUESTBOOK_FILE, JSON.stringify(DEFAULT_GUESTBOOK, null, 2), 'utf-8');
+      return DEFAULT_GUESTBOOK;
+    }
+    const raw = fs.readFileSync(GUESTBOOK_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return {
+      visitors: { ...DEFAULT_GUESTBOOK.visitors, ...(parsed.visitors || {}) },
+      comments: Array.isArray(parsed.comments) ? parsed.comments : DEFAULT_GUESTBOOK.comments,
+    };
+  } catch (err) {
+    console.error('[Guestbook] Error reading guestbook file, using in-memory defaults:', err);
+    return DEFAULT_GUESTBOOK;
+  }
+}
+
+function writeGuestbookData(data: GuestbookStorage): void {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(GUESTBOOK_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Guestbook] Error writing to guestbook file:', err);
+  }
+}
+
+// 1. GET Visitor Stats
+app.get('/api/visitors/stats', (_req: Request, res: Response) => {
+  const data = readGuestbookData();
+  const currentDate = new Date().toISOString().split('T')[0];
+
+  // Auto-rollover if day changed
+  if (data.visitors.lastDate !== currentDate) {
+    data.visitors.todayVisitors = Math.floor(Math.random() * 20) + 15;
+    data.visitors.lastDate = currentDate;
+    writeGuestbookData(data);
+  }
+
+  res.json({
+    totalVisitors: data.visitors.totalVisitors,
+    todayVisitors: data.visitors.todayVisitors,
+    uniqueVisitors: data.visitors.uniqueVisitors,
+    lastUpdated: new Date().toISOString(),
+    weeklyTrend: data.visitors.weeklyTrend,
+  });
+});
+
+// 2. POST Record Visit
+app.post('/api/visitors/record', (req: Request, res: Response) => {
+  const { isNewSession } = req.body || {};
+  const data = readGuestbookData();
+  const currentDate = new Date().toISOString().split('T')[0];
+
+  if (data.visitors.lastDate !== currentDate) {
+    data.visitors.todayVisitors = 1;
+    data.visitors.lastDate = currentDate;
+  } else {
+    data.visitors.todayVisitors += 1;
+  }
+
+  data.visitors.totalVisitors += 1;
+
+  if (isNewSession) {
+    data.visitors.uniqueVisitors += 1;
+  }
+
+  writeGuestbookData(data);
+
+  res.json({
+    success: true,
+    totalVisitors: data.visitors.totalVisitors,
+    todayVisitors: data.visitors.todayVisitors,
+    uniqueVisitors: data.visitors.uniqueVisitors,
+    lastUpdated: new Date().toISOString(),
+  });
+});
+
+// 3. GET Comments List
+app.get('/api/comments', (_req: Request, res: Response) => {
+  const data = readGuestbookData();
+  res.json(data.comments);
+});
+
+// 4. POST Add Comment
+app.post('/api/comments', (req: Request, res: Response) => {
+  const { nama, instansi, role, komentar, rating, emoji } = req.body || {};
+
+  if (!nama || !komentar) {
+    return res.status(400).json({ error: 'Nama dan komentar wajib diisi!' });
+  }
+
+  const data = readGuestbookData();
+
+  const colors = [
+    'from-blue-600 to-indigo-800',
+    'from-emerald-500 to-teal-700',
+    'from-purple-600 to-pink-700',
+    'from-amber-500 to-orange-700',
+    'from-rose-500 to-red-700',
+    'from-cyan-500 to-blue-700',
+  ];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+  const newComment: CommentData = {
+    id: 'c_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    nama: String(nama).trim(),
+    instansi: String(instansi || 'Satuan Pendidikan').trim(),
+    role: String(role || 'Guru').trim(),
+    komentar: String(komentar).trim(),
+    rating: Number(rating) >= 1 && Number(rating) <= 5 ? Number(rating) : 5,
+    emoji: emoji || '✨',
+    likes: 1,
+    createdAt: new Date().toISOString(),
+    avatarColor: randomColor,
+  };
+
+  data.comments.unshift(newComment);
+  writeGuestbookData(data);
+
+  res.status(201).json({
+    success: true,
+    comment: newComment,
+  });
+});
+
+// 5. POST Like Comment
+app.post('/api/comments/:id/like', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const data = readGuestbookData();
+
+  const comment = data.comments.find((c) => c.id === id);
+  if (!comment) {
+    return res.status(404).json({ error: 'Komentar tidak ditemukan' });
+  }
+
+  comment.likes += 1;
+  writeGuestbookData(data);
+
+  res.json({
+    success: true,
+    likes: comment.likes,
+  });
+});
+
+// 6. DELETE Comment
+app.delete('/api/comments/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const data = readGuestbookData();
+
+  const index = data.comments.findIndex((c) => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Komentar tidak ditemukan' });
+  }
+
+  data.comments.splice(index, 1);
+  writeGuestbookData(data);
+
+  res.json({ success: true, message: 'Komentar berhasil dihapus' });
+});
+
+// ==========================================
+// 7. PKL (PRAKTIK KERJA LAPANGAN) MONITORING & PRESENSI API
+// ==========================================
+const PKL_DATA_FILE = path.join(process.cwd(), 'data', 'pkl_data.json');
+
+interface PresensiPklItem {
+  id: string;
+  tanggal: string;
+  siswaId: string;
+  nisn: string;
+  namaSiswa: string;
+  kelas: string;
+  namaDudi: string;
+  alamatDudi?: string;
+  guruPembimbing?: string;
+  waktuDatang: string;
+  timestampDatang: number;
+  fotoDatang: string;
+  keteranganDatang?: string;
+  lokasiDatang?: string;
+  waktuPulang?: string;
+  timestampPulang?: number;
+  fotoPulang?: string;
+  keteranganPulang?: string;
+  ringkasanPekerjaan?: string;
+  status: 'masih_pkl' | 'selesai_pulang' | 'izin' | 'sakit';
+  verifiedByTeacher?: boolean;
+  catatanGuru?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TempatPklItem {
+  id: string;
+  namaDudi: string;
+  bidangUsaha: string;
+  alamat: string;
+  pembimbingDudi: string;
+  kontakPembimbing: string;
+  guruPembimbing: string;
+}
+
+interface PklStorage {
+  places: TempatPklItem[];
+  attendances: PresensiPklItem[];
+}
+
+const DEFAULT_PKL_DATA: PklStorage = {
+  places: [
+    {
+      id: 'dudi_001',
+      namaDudi: 'PT Astra Digital Inovasi',
+      bidangUsaha: 'Software Development & IT Support',
+      alamat: 'Gedung Astra Tower Lt. 12, Jl. Jend. Sudirman Kav. 5, Jakarta Pusat',
+      pembimbingDudi: 'Hendra Wijaya, S.Kom.',
+      kontakPembimbing: '0813-8899-1234',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+    },
+    {
+      id: 'dudi_002',
+      namaDudi: 'PT Telekomunikasi Selular (Telkomsel)',
+      bidangUsaha: 'Jaringan Telekomunikasi & Cloud Infrastructure',
+      alamat: 'Telkomsel Smart Office, Jl. Gatot Subroto Kav. 52, Jakarta Selatan',
+      pembimbingDudi: 'Ir. Bambang Hermanto',
+      kontakPembimbing: '0812-3456-7890',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+    },
+    {
+      id: 'dudi_003',
+      namaDudi: 'Dinas Komunikasi & Informatika (Diskominfo)',
+      bidangUsaha: 'Sistem Informasi Publik & Cyber Security',
+      alamat: 'Gedung Balaikota Blok H Lt. 14, Jakarta Pusat',
+      pembimbingDudi: 'Rina Agustina, S.T., M.M.',
+      kontakPembimbing: '0811-2233-4455',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+    },
+    {
+      id: 'dudi_004',
+      namaDudi: 'Studio Animasi & Kreatif Visual Nusantara',
+      bidangUsaha: 'Multimedia, UI/UX Design & 3D Modeling',
+      alamat: 'Ruko Kebayoran Arcade 2 Blok B No. 8, Bintaro Jaya',
+      pembimbingDudi: 'Aditya Pratama, S.Sn.',
+      kontakPembimbing: '0852-9988-7766',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+    },
+  ],
+  attendances: [
+    {
+      id: 'pkl_att_001',
+      tanggal: new Date().toISOString().split('T')[0],
+      siswaId: 's_001',
+      nisn: '0078129341',
+      namaSiswa: 'Ahmad Faiz Al-Ghifari',
+      kelas: 'XI RPL 1',
+      namaDudi: 'PT Astra Digital Inovasi',
+      alamatDudi: 'Gedung Astra Tower Lt. 12, Jakarta Pusat',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+      waktuDatang: '07:28:15',
+      timestampDatang: Date.now() - 3600000 * 5,
+      fotoDatang: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80',
+      keteranganDatang: 'Tiba tepat waktu di lobby kantor bersama tim IT development.',
+      lokasiDatang: 'Lobby Utama Astra Tower',
+      waktuPulang: undefined,
+      timestampPulang: undefined,
+      fotoPulang: undefined,
+      keteranganPulang: undefined,
+      ringkasanPekerjaan: 'Mengikuti standup meeting pagi dan mulai slicing modul frontend.',
+      status: 'masih_pkl',
+      verifiedByTeacher: true,
+      catatanGuru: 'Bagus, teruskan kedisiplinannya Faiz!',
+      createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+      updatedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    },
+    {
+      id: 'pkl_att_002',
+      tanggal: new Date().toISOString().split('T')[0],
+      siswaId: 's_002',
+      nisn: '0078129342',
+      namaSiswa: 'Anindya Putri Maharani',
+      kelas: 'XI RPL 1',
+      namaDudi: 'PT Telekomunikasi Selular (Telkomsel)',
+      alamatDudi: 'Telkomsel Smart Office Lt. 8, Jakarta Selatan',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+      waktuDatang: '07:18:40',
+      timestampDatang: Date.now() - 3600000 * 6,
+      fotoDatang: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=80',
+      keteranganDatang: 'Sudah berseragam rapi dan tapping ID Card Telkomsel.',
+      lokasiDatang: 'Ruang NOC Lt. 8',
+      waktuPulang: undefined,
+      timestampPulang: undefined,
+      fotoPulang: undefined,
+      ringkasanPekerjaan: 'Observasi monitoring trafik server jaringan fiber optic.',
+      status: 'masih_pkl',
+      verifiedByTeacher: true,
+      catatanGuru: 'Catat log gangguan dengan teliti ya Anindya.',
+      createdAt: new Date(Date.now() - 3600000 * 6).toISOString(),
+      updatedAt: new Date(Date.now() - 3600000 * 6).toISOString(),
+    },
+    {
+      id: 'pkl_att_003',
+      tanggal: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+      siswaId: 's_001',
+      nisn: '0078129341',
+      namaSiswa: 'Ahmad Faiz Al-Ghifari',
+      kelas: 'XI RPL 1',
+      namaDudi: 'PT Astra Digital Inovasi',
+      alamatDudi: 'Gedung Astra Tower Lt. 12, Jakarta Pusat',
+      guruPembimbing: 'Yusak Yokoyama, S.Pd., M.Pd.',
+      waktuDatang: '07:22:10',
+      timestampDatang: Date.now() - 86400000 - 3600000 * 9,
+      fotoDatang: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80',
+      keteranganDatang: 'Datang pagi hari sebelum jam operasional kantor.',
+      lokasiDatang: 'Ruang IT Dev Squad',
+      waktuPulang: '16:35:20',
+      timestampPulang: Date.now() - 86400000,
+      fotoPulang: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
+      keteranganPulang: 'Pekerjaan merapikan dokumentasi API telah selesai dan di-commit ke Git.',
+      ringkasanPekerjaan: 'Menyelesaikan testing komponen form dan membuat user guide singkat.',
+      status: 'selesai_pulang',
+      verifiedByTeacher: true,
+      catatanGuru: 'Mantap, rekap waktu kerja 9 jam 13 menit tercatat lengkap.',
+      createdAt: new Date(Date.now() - 86400000 - 3600000 * 9).toISOString(),
+      updatedAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+  ],
+};
+
+function readPklData(): PklStorage {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(PKL_DATA_FILE)) {
+      const content = fs.readFileSync(PKL_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (parsed && Array.isArray(parsed.attendances)) {
+        return parsed;
+      }
+    }
+    fs.writeFileSync(PKL_DATA_FILE, JSON.stringify(DEFAULT_PKL_DATA, null, 2), 'utf-8');
+    return DEFAULT_PKL_DATA;
+  } catch (err) {
+    console.warn('Gagal membaca pkl_data.json, memakai default:', err);
+    return DEFAULT_PKL_DATA;
+  }
+}
+
+function writePklData(data: PklStorage): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(PKL_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Gagal menulis pkl_data.json:', err);
+    return false;
+  }
+}
+
+// GET all PKL Presensi records
+app.get('/api/pkl/presensi', (req: Request, res: Response) => {
+  const data = readPklData();
+  const { tanggal, siswaId, status } = req.query;
+
+  let results = [...data.attendances];
+
+  if (tanggal && typeof tanggal === 'string') {
+    results = results.filter((item) => item.tanggal === tanggal);
+  }
+  if (siswaId && typeof siswaId === 'string') {
+    results = results.filter((item) => item.siswaId === siswaId || item.nisn === siswaId);
+  }
+  if (status && typeof status === 'string') {
+    results = results.filter((item) => item.status === status);
+  }
+
+  // Sort latest first
+  results.sort((a, b) => b.timestampDatang - a.timestampDatang);
+
+  res.json(results);
+});
+
+// POST PKL Presensi (Check-in or Check-out or direct full entry)
+app.post('/api/pkl/presensi', (req: Request, res: Response) => {
+  const data = readPklData();
+  const body = req.body || {};
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const targetDate = body.tanggal || todayStr;
+
+  // Check if an existing attendance for this student exists today
+  const existingIndex = data.attendances.findIndex(
+    (item) =>
+      item.tanggal === targetDate &&
+      ((body.siswaId && item.siswaId === body.siswaId) ||
+        (body.nisn && item.nisn === body.nisn) ||
+        (body.namaSiswa && item.namaSiswa.toLowerCase() === body.namaSiswa.toLowerCase()))
+  );
+
+  // If this is a Check-Out action on an existing entry
+  if (body.action === 'checkout' && existingIndex !== -1) {
+    const existing = data.attendances[existingIndex];
+    existing.waktuPulang = body.waktuPulang || new Date().toLocaleTimeString('id-ID', { hour12: false });
+    existing.timestampPulang = body.timestampPulang || Date.now();
+    existing.fotoPulang = body.fotoPulang || existing.fotoPulang;
+    existing.keteranganPulang = body.keteranganPulang || existing.keteranganPulang || '';
+    existing.ringkasanPekerjaan = body.ringkasanPekerjaan || existing.ringkasanPekerjaan || '';
+    existing.status = 'selesai_pulang';
+    existing.updatedAt = new Date().toISOString();
+
+    writePklData(data);
+    return res.json({
+      success: true,
+      message: 'Presensi waktu pulang PKL berhasil disimpan!',
+      record: existing,
+    });
+  }
+
+  // If an existing entry already has Check-In and we are supplying Check-Out info
+  if (existingIndex !== -1 && body.fotoPulang && !body.isNewForced) {
+    const existing = data.attendances[existingIndex];
+    existing.waktuPulang = body.waktuPulang || new Date().toLocaleTimeString('id-ID', { hour12: false });
+    existing.timestampPulang = body.timestampPulang || Date.now();
+    existing.fotoPulang = body.fotoPulang;
+    if (body.keteranganPulang) existing.keteranganPulang = body.keteranganPulang;
+    if (body.ringkasanPekerjaan) existing.ringkasanPekerjaan = body.ringkasanPekerjaan;
+    existing.status = 'selesai_pulang';
+    existing.updatedAt = new Date().toISOString();
+
+    writePklData(data);
+    return res.json({
+      success: true,
+      message: 'Presensi pulang berhasil diperbarui!',
+      record: existing,
+    });
+  }
+
+  // Create New Presensi Item (Check-In or Full)
+  const now = new Date();
+  const timeNowStr = now.toLocaleTimeString('id-ID', { hour12: false });
+
+  const newItem: PresensiPklItem = {
+    id: body.id || `pkl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    tanggal: targetDate,
+    siswaId: body.siswaId || `s_${Date.now()}`,
+    nisn: body.nisn || '-',
+    namaSiswa: body.namaSiswa || 'Siswa PKL',
+    kelas: body.kelas || 'XI RPL',
+    namaDudi: body.namaDudi || 'Instansi / Perusahaan DUDI',
+    alamatDudi: body.alamatDudi || '',
+    guruPembimbing: body.guruPembimbing || 'Yusak Yokoyama, S.Pd., M.Pd.',
+    waktuDatang: body.waktuDatang || timeNowStr,
+    timestampDatang: body.timestampDatang || Date.now(),
+    fotoDatang: body.fotoDatang || '',
+    keteranganDatang: body.keteranganDatang || '',
+    lokasiDatang: body.lokasiDatang || 'Lokasi Tempat PKL',
+    // Check-out fields CAN BE EMPTY / UNDEFINED!
+    waktuPulang: body.waktuPulang || undefined,
+    timestampPulang: body.timestampPulang || (body.fotoPulang ? Date.now() : undefined),
+    fotoPulang: body.fotoPulang || undefined,
+    keteranganPulang: body.keteranganPulang || undefined,
+    ringkasanPekerjaan: body.ringkasanPekerjaan || '',
+    status: body.fotoPulang ? 'selesai_pulang' : (body.status || 'masih_pkl'),
+    verifiedByTeacher: body.verifiedByTeacher ?? false,
+    catatanGuru: body.catatanGuru || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  data.attendances.unshift(newItem);
+  writePklData(data);
+
+  res.status(201).json({
+    success: true,
+    message: newItem.waktuPulang
+      ? 'Presensi lengkap datang & pulang berhasil dikirim!'
+      : 'Presensi waktu datang berhasil dikirim! Anda dapat mengisi waktu pulang nanti saat selesai jam kerja.',
+    record: newItem,
+  });
+});
+
+// PUT /api/pkl/presensi/:id (Update check-out, teacher verification, or notes)
+app.put('/api/pkl/presensi/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const data = readPklData();
+
+  const index = data.attendances.findIndex((item) => item.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Data presensi PKL tidak ditemukan' });
+  }
+
+  const current = data.attendances[index];
+  const body = req.body || {};
+
+  data.attendances[index] = {
+    ...current,
+    ...body,
+    updatedAt: new Date().toISOString(),
+  };
+
+  writePklData(data);
+  res.json({ success: true, message: 'Presensi PKL berhasil diperbarui', record: data.attendances[index] });
+});
+
+// DELETE /api/pkl/presensi/:id
+app.delete('/api/pkl/presensi/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const data = readPklData();
+
+  const index = data.attendances.findIndex((item) => item.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Data presensi PKL tidak ditemukan' });
+  }
+
+  data.attendances.splice(index, 1);
+  writePklData(data);
+  res.json({ success: true, message: 'Data presensi PKL berhasil dihapus' });
+});
+
+// GET & POST /api/pkl/places
+app.get('/api/pkl/places', (_req: Request, res: Response) => {
+  const data = readPklData();
+  res.json(data.places || []);
+});
+
+app.post('/api/pkl/places', (req: Request, res: Response) => {
+  const data = readPklData();
+  const body = req.body || {};
+
+  if (!body.namaDudi) {
+    return res.status(400).json({ error: 'Nama instansi / DUDI wajib diisi' });
+  }
+
+  const newPlace: TempatPklItem = {
+    id: body.id || `dudi_${Date.now()}`,
+    namaDudi: body.namaDudi,
+    bidangUsaha: body.bidangUsaha || 'Industri & Teknologi',
+    alamat: body.alamat || '',
+    pembimbingDudi: body.pembimbingDudi || '-',
+    kontakPembimbing: body.kontakPembimbing || '-',
+    guruPembimbing: body.guruPembimbing || 'Yusak Yokoyama, S.Pd., M.Pd.',
+  };
+
+  data.places.push(newPlace);
+  writePklData(data);
+  res.status(201).json({ success: true, place: newPlace });
 });
 
 // Clean HTML response helper

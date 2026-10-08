@@ -6,9 +6,10 @@ import { UserSession } from '../../types';
 
 interface LoginModalProps {
   onLoginSuccess: (user: UserSession) => void;
+  onOpenPklPortal?: () => void;
 }
 
-export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
+export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess, onOpenPklPortal }) => {
   const [username, setUsername] = useState('www.yusakyokoyama.id');
   const [password, setPassword] = useState('123456');
   const [loading, setLoading] = useState(false);
@@ -170,6 +171,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             {loading ? 'Memverifikasi...' : 'Masuk ke Sistem Administrasi'}
           </button>
         </form>
+
+        {onOpenPklPortal && (
+          <div className="pt-2 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={onOpenPklPortal}
+              className="w-full py-2.5 bg-emerald-950/60 hover:bg-emerald-900/80 border-2 border-emerald-500/60 text-emerald-300 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-950/40"
+            >
+              <span>🏢</span>
+              <span>Akses Portal Presensi Murid PKL (Untuk Siswa)</span>
+            </button>
+          </div>
+        )}
 
         <div className="text-center text-[11px] text-slate-500 pt-2 border-t border-slate-800">
           Kurikulum Merdeka • Presensi QR Kamera • Deep Learning AI Suite

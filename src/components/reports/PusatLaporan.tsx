@@ -306,11 +306,11 @@ export const PusatLaporan: React.FC<PusatLaporanProps> = ({
         {/* Kop Surat Sekolah Resmi */}
         <div className="flex items-center justify-between pb-3 mb-5 border-b-4 border-double border-slate-900 kop-surat">
           <div className="w-16 h-16 shrink-0 flex items-center justify-center">
-            {pengaturan.logoDinasUrl ? (
-              <img src={pengaturan.logoDinasUrl} alt="Logo Dinas" className="w-14 h-14 object-contain" />
+            {pengaturan.logoSekolahUrl ? (
+              <img src={pengaturan.logoSekolahUrl} alt="Logo Sekolah" className="w-14 h-14 object-contain" />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-xs text-blue-800">
-                DINAS
+              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-xs text-emerald-800">
+                SEKOLAH
               </div>
             )}
           </div>
@@ -324,13 +324,7 @@ export const PusatLaporan: React.FC<PusatLaporanProps> = ({
           </div>
 
           <div className="w-16 h-16 shrink-0 flex items-center justify-center">
-            {pengaturan.logoSekolahUrl ? (
-              <img src={pengaturan.logoSekolahUrl} alt="Logo Sekolah" className="w-14 h-14 object-contain" />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-xs text-emerald-800">
-                SEKOLAH
-              </div>
-            )}
+            {/* Kosong / Logo dipindah ke kiri */}
           </div>
         </div>
 
