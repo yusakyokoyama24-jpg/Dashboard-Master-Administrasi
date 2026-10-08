@@ -362,122 +362,202 @@ export const exportService = {
   // 5. Export PowerPoint (.pptx) via pptxgenjs
   exportPptPresentation(presentation: PptPresentation) {
     const ppt = new pptxgen();
-    ppt.layout = 'LAYOUT_16x9';
+    ppt.defineLayout({ name: 'WIDESCREEN_16_9', width: 13.333, height: 7.5 });
+    ppt.layout = 'WIDESCREEN_16_9';
 
-    // Slide Title
+    // 1. Title Slide (Gorgeous Dark Modern Theme)
     const titleSlide = ppt.addSlide();
-    titleSlide.background = { color: '0A192F' };
-    titleSlide.addText(presentation.presentationTitle, {
-      x: 1,
-      y: 2,
-      w: 11.3,
-      h: 1.5,
-      fontSize: 34,
-      bold: true,
-      color: '64FFDA',
-      align: 'center',
+    titleSlide.background = { color: '0F172A' }; // Slate 900
+
+    // Decorative top accent bar
+    titleSlide.addShape(ppt.ShapeType.rect, {
+      x: 0,
+      y: 0,
+      w: 13.33,
+      h: 0.15,
+      fill: { color: '3B82F6' }, // Blue accent
     });
+
+    // Subject badge
     if (presentation.subject) {
+      titleSlide.addShape(ppt.ShapeType.roundRect, {
+        x: 3.66,
+        y: 1.8,
+        w: 6.0,
+        h: 0.55,
+        fill: { color: '1E293B' },
+        line: { color: '3B82F6', width: 1 },
+      });
       titleSlide.addText(`Mata Pelajaran: ${presentation.subject}`, {
-        x: 1,
-        y: 3.8,
-        w: 11.3,
-        h: 0.8,
-        fontSize: 20,
-        color: 'CCD6F6',
+        x: 3.66,
+        y: 1.8,
+        w: 6.0,
+        h: 0.55,
+        fontSize: 14,
+        color: '64FFDA',
         align: 'center',
+        valign: 'middle',
+        bold: true,
+        wrap: true,
       });
     }
-    titleSlide.addText('Tongguru EdAdmin Pro - Media Ajar Interaktif', {
-      x: 1,
-      y: 6.2,
-      w: 11.3,
-      h: 0.5,
-      fontSize: 12,
-      color: '8892B0',
+
+    // Main Presentation Title
+    titleSlide.addText(presentation.presentationTitle, {
+      x: 1.0,
+      y: 2.6,
+      w: 11.33,
+      h: 2.2,
+      fontSize: 30,
+      bold: true,
+      color: 'FFFFFF',
       align: 'center',
+      valign: 'middle',
+      lineSpacing: 38,
+      wrap: true,
     });
 
-    // Content Slides
-    presentation.slides.forEach((s) => {
-      const slide = ppt.addSlide();
-      slide.background = { color: 'F8FAFC' };
+    // Subtitle / Presenter footer
+    titleSlide.addText('Media Pembelajaran Interaktif • Standar Kurikulum Merdeka', {
+      x: 1.0,
+      y: 6.0,
+      w: 11.33,
+      h: 0.5,
+      fontSize: 12,
+      color: '94A3B8',
+      align: 'center',
+      wrap: true,
+    });
 
-      // Header Banner
+    // 2. Content Slides
+    const totalSlides = presentation.slides.length;
+    presentation.slides.forEach((s, idx) => {
+      const slide = ppt.addSlide();
+      slide.background = { color: 'F8FAFC' }; // Slate 50
+
+      // Top Header Banner
       slide.addShape(ppt.ShapeType.rect, {
         x: 0,
         y: 0,
         w: 13.33,
-        h: 1.2,
-        fill: { color: '1A3A5C' },
+        h: 1.1,
+        fill: { color: '0F172A' },
       });
 
+      // Header Accent line
+      slide.addShape(ppt.ShapeType.rect, {
+        x: 0,
+        y: 1.1,
+        w: 13.33,
+        h: 0.08,
+        fill: { color: '3B82F6' },
+      });
+
+      // Slide Title
       slide.addText(s.title, {
         x: 0.8,
-        y: 0.25,
-        w: 11.5,
-        h: 0.7,
-        fontSize: 22,
+        y: 0.15,
+        w: 11.7,
+        h: 0.8,
+        fontSize: 20,
         bold: true,
         color: 'FFFFFF',
+        valign: 'middle',
+        wrap: true,
       });
 
+      // Subtitle if present
+      let contentTop = 1.6;
       if (s.subtitle) {
         slide.addText(s.subtitle, {
           x: 0.8,
-          y: 1.5,
-          w: 11.5,
-          h: 0.5,
-          fontSize: 14,
+          y: 1.3,
+          w: 11.7,
+          h: 0.35,
+          fontSize: 13,
           italic: true,
           color: '475569',
+          wrap: true,
         });
+        contentTop = 1.75;
       }
+
+      const hasKeyTakeaway = Boolean(s.keyTakeaway && s.keyTakeaway.trim().length > 0);
+      const bulletWidth = hasKeyTakeaway ? 7.4 : 11.7;
 
       // Bullets
       if (s.bullets && s.bullets.length > 0) {
-        const bulletItems = s.bullets.map((b) => ({ text: b, options: { bullet: true } }));
+        const bulletItems = s.bullets.map((b) => ({
+          text: b,
+          options: { bullet: { code: '25AA' }, paraSpaceAfter: 12, fontSize: 13, color: '1E293B', wrap: true }
+        }));
         slide.addText(bulletItems, {
           x: 0.8,
-          y: 2.2,
-          w: 7.5,
-          h: 4.2,
-          fontSize: 16,
-          color: '1E293B',
-          lineSpacing: 26,
+          y: contentTop,
+          w: bulletWidth,
+          h: 5.1 - contentTop,
+          lineSpacing: 18,
+          wrap: true,
         });
       }
 
-      // Key Takeaway Card on the right
-      if (s.keyTakeaway) {
+      // Key Takeaway Card on the right (if present)
+      if (hasKeyTakeaway) {
+        // Card Background
         slide.addShape(ppt.ShapeType.roundRect, {
-          x: 8.8,
-          y: 2.2,
-          w: 3.8,
-          h: 4.0,
+          x: 8.5,
+          y: contentTop,
+          w: 4.0,
+          h: 5.1 - contentTop,
           fill: { color: 'EFF6FF' },
-          line: { color: '3B82F6', width: 2 },
+          line: { color: '3B82F6', width: 1 },
         });
 
-        slide.addText('💡 PESAN KUNCI:', {
-          x: 9.1,
-          y: 2.5,
-          w: 3.2,
+        // Card Header Badge
+        slide.addShape(ppt.ShapeType.roundRect, {
+          x: 8.7,
+          y: contentTop + 0.2,
+          w: 3.6,
           h: 0.4,
-          fontSize: 13,
+          fill: { color: '3B82F6' },
+        });
+        slide.addText('💡 PESAN KUNCI', {
+          x: 8.7,
+          y: contentTop + 0.2,
+          w: 3.6,
+          h: 0.4,
+          fontSize: 11,
           bold: true,
-          color: '1D4ED8',
+          color: 'FFFFFF',
+          align: 'center',
+          valign: 'middle',
+          wrap: true,
         });
 
-        slide.addText(s.keyTakeaway, {
-          x: 9.1,
-          y: 3.0,
-          w: 3.2,
-          h: 2.8,
-          fontSize: 14,
+        slide.addText(s.keyTakeaway!, {
+          x: 8.7,
+          y: contentTop + 0.75,
+          w: 3.6,
+          h: (5.1 - contentTop) - 0.9,
+          fontSize: 12,
           color: '1E293B',
+          lineSpacing: 16,
+          valign: 'top',
+          wrap: true,
         });
       }
+
+      // Footer Slide Number & Branding
+      slide.addText(`Slide ${idx + 1} dari ${totalSlides}  •  Tongguru EdAdmin Pro`, {
+        x: 0.8,
+        y: 7.1,
+        w: 11.7,
+        h: 0.3,
+        fontSize: 9,
+        color: '94A3B8',
+        align: 'right',
+        wrap: true,
+      });
 
       // Speaker Notes
       if (s.speakerNotes) {

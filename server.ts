@@ -27,7 +27,7 @@ const getAiClient = () => {
 
 // Retry helper with exponential backoff & model fallbacks
 async function generateAiContentWithFallback(prompt: string, systemInstruction?: string): Promise<string> {
-  const models = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-pro'];
+  const models = ['gemini-3.8-flash', 'gemini-2.5-pro'];
   const maxRetries = 2;
   const ai = getAiClient();
 
