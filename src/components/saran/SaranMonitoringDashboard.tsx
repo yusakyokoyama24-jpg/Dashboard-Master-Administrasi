@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
 import {
   Lightbulb,
   Search,
@@ -20,11 +21,13 @@ import {
   Building2,
   User,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Share2
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { SaranMasukan, Pengaturan, Siswa } from '../../types';
-import { getSaranList, updateSaranStatus, deleteSaran } from '../../services/saranService';
+import { saranService, getSaranList, updateSaranStatus, deleteSaran } from '../../services/saranService';
 
 interface SaranMonitoringDashboardProps {
   pengaturan?: Pengaturan;
@@ -46,19 +49,105 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
   const [copied, setCopied] = useState(false);
   const [actionNotes, setActionNotes] = useState('');
   const [activeTabStatus, setActiveTabStatus] = useState<string>('all');
-
-  const loadData = () => {
-    const list = getSaranList();
-    setSaranList(list);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const previousCountRef = useRef<number | null>(null);
 
   const studentPortalUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}?portal=saran`
     : '';
+
+  // Pleasant audio chime when new student saran arrives
+  const playNewSaranSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.15); // G5
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch {}
+  };
+
+  const loadData = async (showLoadingSpinner = false) => {
+    if (showLoadingSpinner) setIsRefreshing(true);
+    try {
+      const data = await saranService.fetchSaran();
+      setSaranList(data);
+      setLastSyncTime(new Date());
+
+      if (previousCountRef.current !== null && data.length > previousCountRef.current) {
+        playNewSaranSound();
+        const diff = data.length - previousCountRef.current;
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'success',
+          title: `💡 Ada ${diff} saran & masukan baru dari murid!`,
+          showConfirmButton: false,
+          timer: 4500,
+          timerProgressBar: true,
+        });
+      }
+      previousCountRef.current = data.length;
+    } catch (err) {
+      console.error('Error fetching saran list:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData(true);
+
+    if (studentPortalUrl) {
+      QRCode.toDataURL(studentPortalUrl, {
+        width: 360,
+        margin: 2,
+        color: { dark: '#b45309', light: '#FFFFFF' },
+      })
+        .then((url) => setQrDataUrl(url))
+        .catch((err) => console.warn('QR code gen err:', err));
+    }
+
+    // Auto-polling interval every 5 seconds for real-time mobile sync
+    const interval = setInterval(() => {
+      loadData(false);
+    }, 5000);
+
+    const handleExternalChange = () => {
+      loadData(false);
+    };
+
+    window.addEventListener('tongguru_saran_data_changed', handleExternalChange);
+    window.addEventListener('storage', handleExternalChange);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('tongguru_saran_channel');
+        bc.onmessage = () => {
+          loadData(false);
+        };
+      } catch {}
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('tongguru_saran_data_changed', handleExternalChange);
+      window.removeEventListener('storage', handleExternalChange);
+      if (bc) bc.close();
+    };
+  }, [studentPortalUrl]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(studentPortalUrl);
@@ -73,6 +162,14 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
     });
   };
 
+  const handleDownloadQr = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement('a');
+    a.href = qrDataUrl;
+    a.download = `QR_Kotak_Saran_${(pengaturan?.namaSekolah || 'Sekolah').replace(/\s+/g, '_')}.png`;
+    a.click();
+  };
+
   const handleDelete = (id: string) => {
     Swal.fire({
       title: 'Hapus Saran Ini?',
@@ -83,10 +180,10 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
       cancelButtonColor: '#64748b',
       confirmButtonText: 'Ya, Hapus',
       cancelButtonText: 'Batal'
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        deleteSaran(id);
-        loadData();
+        await saranService.deleteSaran(id);
+        await loadData(false);
         Swal.fire({
           icon: 'success',
           title: 'Terhapus',
@@ -98,10 +195,10 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
     });
   };
 
-  const handleStatusChange = (id: string, newStatus: SaranMasukan['status']) => {
+  const handleStatusChange = async (id: string, newStatus: SaranMasukan['status']) => {
     const item = saranList.find(s => s.id === id);
-    updateSaranStatus(id, newStatus, item?.catatanGuru);
-    loadData();
+    await saranService.updateSaran(id, newStatus, item?.catatanGuru);
+    await loadData(false);
     Swal.fire({
       icon: 'success',
       title: 'Status Diperbarui',
@@ -111,11 +208,11 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
     });
   };
 
-  const handleSaveNotes = (id: string) => {
+  const handleSaveNotes = async (id: string) => {
     const item = saranList.find(s => s.id === id);
     if (item) {
-      updateSaranStatus(id, item.status, actionNotes);
-      loadData();
+      await saranService.updateSaran(id, item.status, actionNotes);
+      await loadData(false);
       setShowDetailModal(false);
       Swal.fire({
         icon: 'success',
@@ -199,6 +296,21 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-black/25 backdrop-blur-md px-3 py-2 rounded-xl border border-white/20 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-xs font-bold text-white tracking-wide">Real-Time Aktif</span>
+              <span className="text-[11px] text-amber-200 hidden sm:inline">
+                • {lastSyncTime.toLocaleTimeString('id-ID')}
+              </span>
+            </div>
+            <button
+              onClick={() => loadData(true)}
+              disabled={isRefreshing}
+              className="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-semibold border border-white/30 shadow-md flex items-center gap-1.5 text-xs backdrop-blur-md transition-all disabled:opacity-50"
+              title="Perbarui data sekarang"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
             <button
               onClick={() => setShowQrModal(true)}
               className="px-4 py-2.5 rounded-xl bg-white text-amber-700 hover:bg-amber-50 font-semibold shadow-md flex items-center gap-2 text-sm transition-all"
@@ -327,11 +439,11 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
                 <Printer className="w-4 h-4" />
               </button>
               <button
-                onClick={loadData}
+                onClick={() => loadData(true)}
                 title="Muat Ulang"
                 className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
@@ -495,14 +607,21 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
               Bagikan QR code ini atau salin tautan agar siswa dapat mengirim saran dan masukan langsung dari HP mereka.
             </p>
 
-            {/* QR Code Simulation Box */}
-            <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-amber-300 dark:border-amber-700 inline-block mb-6 shadow-sm">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(studentPortalUrl)}`}
-                alt="QR Code Portal Saran"
-                className="w-44 h-44 mx-auto rounded-xl"
-              />
-              <p className="text-[10px] font-mono text-slate-400 mt-2">Portal Aspirasi Siswa</p>
+            {/* High Resolution Local QR Code Box */}
+            <div className="bg-white p-4 rounded-2xl border-2 border-amber-300 dark:border-amber-600 inline-block mb-4 shadow-sm">
+              {qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt="QR Code Portal Saran"
+                  className="w-48 h-48 mx-auto rounded-xl shadow-xs"
+                />
+              ) : (
+                <div className="w-48 h-48 flex items-center justify-center">
+                  <RefreshCw className="w-8 h-8 animate-spin text-amber-500" />
+                </div>
+              )}
+              <p className="text-[11px] font-bold text-amber-800 mt-2">Pindai dari Kamera HP Siswa</p>
+              <p className="text-[10px] text-slate-400">Langsung Terhubung Real-Time</p>
             </div>
 
             <div className="space-y-3">
@@ -521,14 +640,22 @@ export const SaranMonitoringDashboard: React.FC<SaranMonitoringDashboardProps> =
                 </button>
               </div>
 
-              <a
-                href={studentPortalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Buka Tautan di Tab Baru
-              </a>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleDownloadQr}
+                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Unduh QR (PNG)
+                </button>
+                <a
+                  href={studentPortalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Buka di Tab Baru
+                </a>
+              </div>
             </div>
 
           </div>

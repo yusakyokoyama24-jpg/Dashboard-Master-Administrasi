@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Lock,
   UserCheck,
+  Download,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import QRCode from 'qrcode';
@@ -43,28 +44,97 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [selectedReportModal, setSelectedReportModal] = useState<BullyingReport | null>(null);
   const [teacherNoteInput, setTeacherNoteInput] = useState('');
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const previousCountRef = React.useRef<number | null>(null);
 
   const currentHost = typeof window !== 'undefined' ? window.location.origin : '';
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const studentPortalUrl = `${currentHost}${currentPath}?portal=bullying`;
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const playNewReportSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch {}
+  };
+
+  const loadData = async (showLoadingSpinner = true) => {
+    if (showLoadingSpinner) setIsLoading(true);
+    setIsRefreshing(true);
     try {
       const data = await bullyingService.fetchReports();
       setReports(data);
+      setLastSyncTime(new Date());
+
+      if (previousCountRef.current !== null && data.length > previousCountRef.current) {
+        playNewReportSound();
+        const diff = data.length - previousCountRef.current;
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'info',
+          title: `🔔 Ada ${diff} pengaduan baru dari murid!`,
+          showConfirmButton: false,
+          timer: 4500,
+          timerProgressBar: true,
+        });
+      }
+      previousCountRef.current = data.length;
     } catch (err) {
       console.error('Error loading bullying reports:', err);
     } finally {
-      setIsLoading(false);
+      if (showLoadingSpinner) setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
     QRCode.toDataURL(studentPortalUrl, { width: 320, margin: 2 })
       .then((url) => setQrDataUrl(url))
       .catch((err) => console.warn('QR code gen err:', err));
+
+    // Polling interval every 5 seconds to ensure student reports appear in real-time
+    const interval = setInterval(() => {
+      loadData(false);
+    }, 5000);
+
+    const handleExternalChange = () => {
+      loadData(false);
+    };
+
+    window.addEventListener('tongguru_bullying_data_changed', handleExternalChange);
+    window.addEventListener('storage', handleExternalChange);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('tongguru_bullying_channel');
+        bc.onmessage = () => {
+          loadData(false);
+        };
+      } catch {}
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('tongguru_bullying_data_changed', handleExternalChange);
+      window.removeEventListener('storage', handleExternalChange);
+      if (bc) bc.close();
+    };
   }, [studentPortalUrl]);
 
   // Copy link
@@ -95,6 +165,14 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
         `*Catatan:* Laporan dapat dikirim secara anonim (rahasia). Keamanan Anda adalah prioritas kami!`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const handleDownloadQr = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement('a');
+    a.href = qrDataUrl;
+    a.download = `QR_Pengaduan_Bullying_${pengaturan.namaSekolah.replace(/\s+/g, '_')}.png`;
+    a.click();
   };
 
   // Filtered reports
@@ -209,6 +287,10 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                   LIVE PORTAL
                 </span>
+                <span className="px-2.5 py-0.5 rounded-md bg-emerald-400/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-semibold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Sinkron Real-time ({lastSyncTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+                </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight mt-1 text-white">
                 Pemantauan & Pengaduan Bullying (Perundungan)
@@ -220,6 +302,15 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={() => loadData(false)}
+              disabled={isRefreshing}
+              className="px-3.5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs backdrop-blur-md border border-white/30 transition-all flex items-center gap-2 disabled:opacity-50"
+              title="Sinkronkan data pengaduan murid dari server"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Sinkron...' : 'Segarkan Data'}</span>
+            </button>
             <button
               onClick={handleCopyLink}
               className="px-3.5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-2"
@@ -415,7 +506,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
           </div>
 
           <button
-            onClick={loadData}
+            onClick={() => loadData(true)}
             className="ml-auto text-xs text-rose-600 hover:underline flex items-center gap-1"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -582,19 +673,28 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
             </div>
 
             <div className="space-y-2">
-              <button
-                onClick={handleCopyLink}
-                className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-2"
-              >
-                <Copy className="w-4 h-4" />
-                <span>Salin Tautan Portal</span>
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleDownloadQr}
+                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh QR (PNG)</span>
+                </button>
+                <button
+                  onClick={handleCopyLink}
+                  className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>Salin Tautan</span>
+                </button>
+              </div>
               <button
                 onClick={handleShareWhatsApp}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors"
               >
                 <MessageCircle className="w-4 h-4" />
-                <span>Kirim Tautan ke WhatsApp</span>
+                <span>Kirim Tautan ke WhatsApp Siswa / Orang Tua</span>
               </button>
             </div>
           </div>

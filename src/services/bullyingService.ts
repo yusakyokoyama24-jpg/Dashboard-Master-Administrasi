@@ -18,6 +18,19 @@ const DEFAULT_BULLYING_REPORTS: BullyingReport[] = [
 ];
 
 export const bullyingService = {
+  notifyChange() {
+    try {
+      window.dispatchEvent(new Event('tongguru_bullying_data_changed'));
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('tongguru_bullying_channel');
+        bc.postMessage({ type: 'DATA_CHANGED', timestamp: Date.now() });
+        bc.close();
+      }
+    } catch {
+      // ignore
+    }
+  },
+
   async fetchReports(): Promise<BullyingReport[]> {
     try {
       const res = await fetch('/api/bullying');
@@ -61,20 +74,23 @@ export const bullyingService = {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.record) {
-          const current = await this.fetchReports();
-          const updated = [data.record, ...current];
-          localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(updated));
-          return data.record;
-        }
+        const saved = data.record || newReport;
+        const current = await this.fetchReports();
+        const exists = current.some((r) => r.id === saved.id);
+        const updated = exists ? current : [saved, ...current];
+        localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(updated));
+        this.notifyChange();
+        return saved;
       }
     } catch (err) {
       console.warn('API bullying offline, pakai localStorage:', err);
     }
 
     const current = await this.fetchReports();
-    const updated = [newReport, ...current];
+    const exists = current.some((r) => r.id === newReport.id);
+    const updated = exists ? current : [newReport, ...current];
     localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(updated));
+    this.notifyChange();
     return newReport;
   },
 
@@ -87,12 +103,12 @@ export const bullyingService = {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.record) {
-          const current = await this.fetchReports();
-          const updated = current.map((r) => (r.id === id ? data.record : r));
-          localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(updated));
-          return data.record;
-        }
+        const saved = data.record;
+        const current = await this.fetchReports();
+        const updated = current.map((r) => (r.id === id ? { ...r, ...saved, ...updates } : r));
+        localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(updated));
+        this.notifyChange();
+        return saved || targetUpdate(current, id, updates);
       }
     } catch {
       // offline fallback
@@ -109,6 +125,7 @@ export const bullyingService = {
     });
 
     localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(updated));
+    this.notifyChange();
     return target;
   },
 
@@ -121,6 +138,12 @@ export const bullyingService = {
     const current = await this.fetchReports();
     const filtered = current.filter((r) => r.id !== id);
     localStorage.setItem(BULLYING_CACHE_KEY, JSON.stringify(filtered));
+    this.notifyChange();
     return true;
   },
 };
+
+function targetUpdate(list: BullyingReport[], id: string, updates: Partial<BullyingReport>): BullyingReport | null {
+  const found = list.find((r) => r.id === id);
+  return found ? { ...found, ...updates } : null;
+}

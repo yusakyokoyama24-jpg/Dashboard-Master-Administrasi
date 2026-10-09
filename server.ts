@@ -761,6 +761,281 @@ app.post('/api/pkl/places', (req: Request, res: Response) => {
   res.status(201).json({ success: true, place: newPlace });
 });
 
+// ==========================================
+// 8. PENGADUAN BULLYING (PERUNDUNGAN) API
+// ==========================================
+const BULLYING_DATA_FILE = path.join(process.cwd(), 'data', 'bullying_data.json');
+
+interface BullyingItem {
+  id: string;
+  tanggal: string;
+  waktu: string;
+  pelaporNama?: string;
+  pelaporKelas?: string;
+  pelaporNisn?: string;
+  isAnonymous: boolean;
+  jenisBullying: 'Fisik' | 'Verbal' | 'Siber (Cyberbullying)' | 'Sosial / Pengucilan' | 'Intimidasi / Ancaman' | 'Lainnya';
+  lokasiKejadian: string;
+  deskripsi: string;
+  pihakTerlibat?: string;
+  buktiFoto?: string;
+  status: 'Menunggu Penanganan' | 'Sedang Ditindaklanjuti' | 'Selesai Ditangani';
+  catatanGuru?: string;
+  createdAt: string;
+}
+
+const DEFAULT_BULLYING_DATA: BullyingItem[] = [
+  {
+    id: 'bully_001',
+    tanggal: new Date().toISOString().split('T')[0],
+    waktu: '10:15',
+    isAnonymous: true,
+    pelaporNama: 'Anonim (Dirahasiakan)',
+    pelaporKelas: '-',
+    pelaporNisn: '-',
+    jenisBullying: 'Verbal',
+    lokasiKejadian: 'Kantin Sekolah',
+    deskripsi: 'Diejek dan dipanggil dengan nama orang tua di depan teman-teman lain saat jam istirahat.',
+    pihakTerlibat: 'Siswa kelas X (dirahasiakan)',
+    status: 'Menunggu Penanganan',
+    createdAt: new Date().toISOString(),
+  },
+];
+
+function readBullyingData(): BullyingItem[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(BULLYING_DATA_FILE)) {
+      const content = fs.readFileSync(BULLYING_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    fs.writeFileSync(BULLYING_DATA_FILE, JSON.stringify(DEFAULT_BULLYING_DATA, null, 2), 'utf-8');
+    return DEFAULT_BULLYING_DATA;
+  } catch (err) {
+    console.warn('Gagal membaca bullying_data.json, memakai default:', err);
+    return DEFAULT_BULLYING_DATA;
+  }
+}
+
+function writeBullyingData(data: BullyingItem[]): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(BULLYING_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Gagal menulis bullying_data.json:', err);
+    return false;
+  }
+}
+
+// GET /api/bullying
+app.get('/api/bullying', (_req: Request, res: Response) => {
+  const reports = readBullyingData();
+  reports.sort((a, b) => new Date(b.createdAt || b.tanggal).getTime() - new Date(a.createdAt || a.tanggal).getTime());
+  res.json(reports);
+});
+
+// POST /api/bullying
+app.post('/api/bullying', (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.deskripsi || !body.lokasiKejadian) {
+    return res.status(400).json({ error: 'Lokasi kejadian dan deskripsi pengaduan wajib diisi!' });
+  }
+
+  const reports = readBullyingData();
+  const now = new Date();
+  const tanggal = body.tanggal || now.toISOString().split('T')[0];
+  const waktu = body.waktu || now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  const newReport: BullyingItem = {
+    id: body.id || `bully_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    tanggal,
+    waktu,
+    isAnonymous: Boolean(body.isAnonymous),
+    pelaporNama: body.isAnonymous ? 'Anonim (Dirahasiakan)' : (body.pelaporNama || 'Anonim'),
+    pelaporKelas: body.isAnonymous ? '-' : (body.pelaporKelas || '-'),
+    pelaporNisn: body.isAnonymous ? '-' : (body.pelaporNisn || '-'),
+    jenisBullying: body.jenisBullying || 'Verbal',
+    lokasiKejadian: body.lokasiKejadian.trim(),
+    deskripsi: body.deskripsi.trim(),
+    pihakTerlibat: body.pihakTerlibat || '',
+    buktiFoto: body.buktiFoto || undefined,
+    status: (body.status as any) || 'Menunggu Penanganan',
+    catatanGuru: body.catatanGuru || '',
+    createdAt: body.createdAt || now.toISOString(),
+  };
+
+  reports.unshift(newReport);
+  writeBullyingData(reports);
+  res.status(201).json({ success: true, record: newReport, message: 'Laporan pengaduan berhasil tersimpan di sistem' });
+});
+
+// PUT /api/bullying/:id
+app.put('/api/bullying/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body || {};
+  const reports = readBullyingData();
+
+  const index = reports.findIndex((r) => r.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Laporan pengaduan tidak ditemukan' });
+  }
+
+  reports[index] = {
+    ...reports[index],
+    ...updates,
+    id,
+  };
+
+  writeBullyingData(reports);
+  res.json({ success: true, record: reports[index], message: 'Status laporan berhasil diperbarui' });
+});
+
+// DELETE /api/bullying/:id
+app.delete('/api/bullying/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const reports = readBullyingData();
+
+  const index = reports.findIndex((r) => r.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Laporan pengaduan tidak ditemukan' });
+  }
+
+  reports.splice(index, 1);
+  writeBullyingData(reports);
+  res.json({ success: true, message: 'Laporan pengaduan berhasil dihapus' });
+});
+
+// ==========================================
+// 9. KOTAK SARAN & MASUKAN SISWA API
+// ==========================================
+const SARAN_DATA_FILE = path.join(process.cwd(), 'data', 'saran_data.json');
+
+interface SaranItem {
+  id: string;
+  tanggal: string;
+  waktu: string;
+  pengirimNama?: string;
+  pengirimKelas?: string;
+  pengirimNisn?: string;
+  isAnonymous: boolean;
+  kategori: string;
+  judul: string;
+  pesan: string;
+  rating?: number;
+  status: 'Baru' | 'Dibaca' | 'Diproses' | 'Selesai / Diterapkan';
+  catatanGuru?: string;
+  createdAt: string;
+}
+
+function readSaranData(): SaranItem[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(SARAN_DATA_FILE)) {
+      const content = fs.readFileSync(SARAN_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    return [];
+  } catch (err) {
+    console.warn('Gagal membaca saran_data.json:', err);
+    return [];
+  }
+}
+
+function writeSaranData(data: SaranItem[]): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(SARAN_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Gagal menulis saran_data.json:', err);
+    return false;
+  }
+}
+
+// GET /api/saran
+app.get('/api/saran', (_req: Request, res: Response) => {
+  const list = readSaranData();
+  list.sort((a, b) => new Date(b.createdAt || b.tanggal).getTime() - new Date(a.createdAt || a.tanggal).getTime());
+  res.json(list);
+});
+
+// POST /api/saran
+app.post('/api/saran', (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.pesan || !body.judul) {
+    return res.status(400).json({ error: 'Judul dan pesan saran wajib diisi!' });
+  }
+
+  const list = readSaranData();
+  const now = new Date();
+  const newSaran: SaranItem = {
+    id: body.id || `saran_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    tanggal: body.tanggal || now.toISOString().split('T')[0],
+    waktu: body.waktu || now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    pengirimNama: body.pengirimNama || '',
+    pengirimKelas: body.pengirimKelas || '',
+    pengirimNisn: body.pengirimNisn || '',
+    isAnonymous: Boolean(body.isAnonymous),
+    kategori: body.kategori || 'Fasilitas Sekolah',
+    judul: body.judul.trim(),
+    pesan: body.pesan.trim(),
+    rating: Number(body.rating) || 5,
+    status: body.status || 'Baru',
+    catatanGuru: body.catatanGuru || '',
+    createdAt: body.createdAt || now.toISOString(),
+  };
+
+  list.unshift(newSaran);
+  writeSaranData(list);
+  res.status(201).json({ success: true, record: newSaran });
+});
+
+// PUT /api/saran/:id
+app.put('/api/saran/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body || {};
+  const list = readSaranData();
+
+  const index = list.findIndex((s) => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Data saran tidak ditemukan' });
+  }
+
+  list[index] = { ...list[index], ...updates, id };
+  writeSaranData(list);
+  res.json({ success: true, record: list[index] });
+});
+
+// DELETE /api/saran/:id
+app.delete('/api/saran/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const list = readSaranData();
+
+  const index = list.findIndex((s) => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Data saran tidak ditemukan' });
+  }
+
+  list.splice(index, 1);
+  writeSaranData(list);
+  res.json({ success: true, message: 'Data saran berhasil dihapus' });
+});
+
 // Clean HTML response helper
 function cleanHtmlOutput(raw: string): string {
   let cleaned = raw.trim();

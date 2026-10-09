@@ -1,0 +1,33 @@
+[
+  {
+    "id": "saran_001",
+    "tanggal": "2026-10-08",
+    "waktu": "08:30",
+    "pengirimNama": "Ahmad Fauzi",
+    "pengirimKelas": "XI RPL 1",
+    "pengirimNisn": "12345",
+    "isAnonymous": false,
+    "kategori": "Fasilitas Sekolah",
+    "judul": "Penambahan Router WiFi di Area Kantin",
+    "pesan": "Sinyal WiFi di area kantin dan lapangan basket sering terputus-putus. Mohon dapat diperkuat atau ditambah access point agar siswa bisa mengakses materi pembelajaran dengan lancar saat istirahat.",
+    "rating": 4,
+    "status": "Diproses",
+    "catatanGuru": "Sudah dikoordinasikan dengan tim IT sekolah untuk penambahan AP baru minggu depan.",
+    "createdAt": "2026-10-08T01:30:00.000Z"
+  },
+  {
+    "id": "saran_002",
+    "tanggal": "2026-10-08",
+    "waktu": "10:15",
+    "pengirimNama": "",
+    "pengirimKelas": "",
+    "pengirimNisn": "",
+    "isAnonymous": true,
+    "kategori": "Kebersihan & Lingkungan",
+    "judul": "Perbanyak Kotak Sampah Organik & Non-Organik",
+    "pesan": "Di koridor lantai 2 gedung utara kadang masih dijumpai sampah plastik karena jarak tempat sampah terlalu jauh satu sama lain.",
+    "rating": 5,
+    "status": "Baru",
+    "createdAt": "2026-10-08T03:15:00.000Z"
+  }
+]

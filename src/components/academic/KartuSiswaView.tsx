@@ -53,11 +53,11 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
     const bullyingUrl = origin + '?portal=bullying';
     const saranUrl = origin + '?portal=saran';
 
-    QRCode.toDataURL(bullyingUrl, { width: 140, margin: 1, color: { dark: '#991b1b', light: '#FFFFFF' } })
+    QRCode.toDataURL(bullyingUrl, { width: 280, margin: 1, color: { dark: '#991b1b', light: '#FFFFFF' } })
       .then((url) => setBullyingQrUrl(url))
       .catch((e) => console.error(e));
 
-    QRCode.toDataURL(saranUrl, { width: 140, margin: 1, color: { dark: '#b45309', light: '#FFFFFF' } })
+    QRCode.toDataURL(saranUrl, { width: 280, margin: 1, color: { dark: '#b45309', light: '#FFFFFF' } })
       .then((url) => setSaranQrUrl(url))
       .catch((e) => console.error(e));
   }, []);

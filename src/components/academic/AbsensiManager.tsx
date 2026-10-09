@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import jsQR from 'jsqr';
+import { BrowserMultiFormatReader, BarcodeFormat, DecodeHintType } from '@zxing/library';
 import Swal from 'sweetalert2';
 import {
   Camera,
@@ -26,6 +27,8 @@ import {
   ChevronRight,
   ShieldCheck,
   Info,
+  Smartphone,
+  Laptop,
 } from 'lucide-react';
 import { Siswa, Absensi } from '../../types';
 import { dbService } from '../../services/db';
@@ -42,6 +45,11 @@ interface LastScanResult {
   time: string;
   catatan: string;
 }
+
+// Detect if running on mobile phone / tablet vs laptop / desktop
+const isMobileDevice =
+  typeof navigator !== 'undefined' &&
+  /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absensiList }) => {
   const [mode, setMode] = useState<'manual' | 'scanner'>('manual');
@@ -61,13 +69,20 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>(
+    isMobileDevice ? 'environment' : 'user'
+  );
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
+  const [activeCameraLabel, setActiveCameraLabel] = useState<string>('');
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isGreenFlash, setIsGreenFlash] = useState(false);
+
+  // Decoders refs
+  const zxingReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const barcodeDetectorRef = useRef<any>(null);
 
   // Scan detection & history states
   const [lastScan, setLastScan] = useState<LastScanResult | null>(null);
@@ -81,6 +96,46 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
   const lastScannedCodeRef = useRef<string>('');
   const isProcessingFrameRef = useRef<boolean>(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Initialize decoders
+  useEffect(() => {
+    try {
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+        BarcodeFormat.ITF,
+      ]);
+      hints.set(DecodeHintType.TRY_HARDER, true);
+      zxingReaderRef.current = new BrowserMultiFormatReader(hints);
+    } catch (e) {
+      console.warn('ZXing init error:', e);
+    }
+
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+          formats: [
+            'code_128',
+            'code_39',
+            'ean_13',
+            'ean_8',
+            'qr_code',
+            'upc_a',
+            'upc_e',
+            'itf',
+          ],
+        });
+      } catch (e) {
+        console.warn('BarcodeDetector init error:', e);
+      }
+    }
+  }, []);
 
   const kelasList = useMemo(() => {
     return Array.from(new Set(siswaList.map((s) => s.kelas))).sort();
@@ -232,6 +287,8 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     }
   }, []);
 
+  const runDetectionLoopRef = useRef<() => void>(() => {});
+
   // Stop camera tracks
   const stopCamera = useCallback(() => {
     setIsScanning(false);
@@ -253,7 +310,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     }
   }, []);
 
-  // Robust Camera Startup with cascading fallbacks
+  // Robust Camera Startup with cascading fallbacks (Works reliably on HP & Laptop Webcams)
   const startCamera = useCallback(
     async (cameraDeviceOverride?: string, facingOverride?: 'environment' | 'user') => {
       stopCamera();
@@ -265,7 +322,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
 
       let stream: MediaStream | null = null;
 
-      // Strategy 1: Specific deviceId if provided
+      // Strategy 1: Specific deviceId if provided (explicit webcam / camera selection)
       if (targetDeviceId) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
@@ -274,13 +331,21 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
               width: { ideal: 1280 },
               height: { ideal: 720 },
             },
+            audio: false,
           });
         } catch {
-          stream = null;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: targetDeviceId },
+              audio: false,
+            });
+          } catch {
+            stream = null;
+          }
         }
       }
 
-      // Strategy 2: Ideal facingMode
+      // Strategy 2: Ideal facingMode (rear camera on mobile, front webcam on laptop)
       if (!stream) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
@@ -289,6 +354,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
               width: { ideal: 1280 },
               height: { ideal: 720 },
             },
+            audio: false,
           });
         } catch {
           stream = null;
@@ -300,25 +366,33 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: targetFacing },
+            audio: false,
           });
         } catch {
           stream = null;
         }
       }
 
-      // Strategy 4: Generic video (Works universally on any laptop/webcam/desktop)
+      // Strategy 4: Universal video true (Universal guarantee for laptop webcam / mobile without constraint errors)
       if (!stream) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: true,
+            audio: false,
           });
-        } catch (err) {
+        } catch (err: any) {
           console.error('All camera attempts failed:', err);
           setIsScanning(false);
           setScanMessage(null);
+          let errorMsg = 'Izin akses kamera diperlukan atau perangkat kamera sedang digunakan aplikasi lain.';
+          if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+            errorMsg = isMobileDevice
+              ? 'Akses kamera diblokir browser HP. Klik ikon gembok / izin situs di browser dan izinkan kamera.'
+              : 'Akses webcam diblokir browser laptop. Izinkan akses kamera atau periksa pengaturan privasi Windows / macOS Anda.';
+          }
           Swal.fire({
             title: 'Kamera Tidak Tersedia',
-            text: 'Izin akses kamera diperlukan atau perangkat kamera sedang digunakan oleh aplikasi lain. Anda juga dapat menggunakan opsi Unggah Foto QR atau Input Manual NISN.',
+            text: errorMsg,
             icon: 'warning',
             confirmButtonColor: '#059669',
           });
@@ -328,10 +402,14 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
 
       streamRef.current = stream;
 
-      // Check torch capability
+      // Extract active track info & torch capability
       try {
         const videoTrack = stream.getVideoTracks()[0];
         if (videoTrack) {
+          const label = videoTrack.label || '';
+          setActiveCameraLabel(
+            label || (targetFacing === 'environment' ? 'Kamera Belakang (HP)' : 'Webcam Depan (Laptop)')
+          );
           const capabilities = (videoTrack.getCapabilities && videoTrack.getCapabilities()) as { torch?: boolean };
           setIsTorchSupported(Boolean(capabilities && capabilities.torch));
         }
@@ -339,16 +417,34 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
         setIsTorchSupported(false);
       }
 
+      // Wait if video element is still mounting in DOM
+      let retries = 0;
+      while (!videoRef.current && retries < 12) {
+        await new Promise((r) => setTimeout(r, 50));
+        retries++;
+      }
+
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        videoRef.current.muted = true;
+        const video = videoRef.current;
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.muted = true;
+
+        video.onloadedmetadata = () => {
+          video.play().catch(console.warn);
+          if (runDetectionLoopRef.current) {
+            runDetectionLoopRef.current();
+          }
+        };
 
         try {
-          await videoRef.current.play();
-          setScanMessage('Arahkan kamera ke barcode/QR Code Kartu Siswa');
+          await video.play();
+          setScanMessage('Arahkan Barcode (garis) atau QR Code Kartu Pelajar ke kamera');
           enumerateCameras();
-          runDetectionLoop();
+          if (runDetectionLoopRef.current) {
+            runDetectionLoopRef.current();
+          }
         } catch (playErr) {
           console.warn('Video play error:', playErr);
         }
@@ -375,7 +471,21 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     }
   };
 
-  // Flip Camera (Front / Back)
+  // Switch to Rear Camera (HP)
+  const switchToBackCamera = () => {
+    setFacingMode('environment');
+    setSelectedCameraId('');
+    startCamera(undefined, 'environment');
+  };
+
+  // Switch to Front / Webcam (Laptop)
+  const switchToFrontCamera = () => {
+    setFacingMode('user');
+    setSelectedCameraId('');
+    startCamera(undefined, 'user');
+  };
+
+  // Flip Camera (Front / Back toggle)
   const flipCamera = () => {
     const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(nextFacing);
@@ -570,22 +680,24 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     ]
   );
 
-  // Core Real-Time Detection Loop: Fast, low-latency, throttled
+  // Core Real-Time Detection Loop: Fast, low-latency, multi-format (Barcode 1D + QR Code 2D)
   const runDetectionLoop = useCallback(() => {
     let lastScanTick = 0;
 
-    const tick = (now: number) => {
+    const tick = async (now: number) => {
       if (!isScanning) return;
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
 
-      // Throttle scanning to every ~90ms to keep frame processing sub-10ms without CPU overheating
+      // Throttle scanning to every ~85ms to keep frame processing sub-10ms without CPU overheating
       if (
         video &&
         canvas &&
-        video.readyState === video.HAVE_ENOUGH_DATA &&
-        now - lastScanTick > 90 &&
+        video.readyState >= video.HAVE_CURRENT_DATA &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        now - lastScanTick > 85 &&
         !isProcessingFrameRef.current
       ) {
         lastScanTick = now;
@@ -606,26 +718,49 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
             }
 
             ctx.drawImage(video, 0, 0, targetW, targetH);
-            const imgData = ctx.getImageData(0, 0, targetW, targetH);
 
-            const code = jsQR(imgData.data, targetW, targetH, {
-              inversionAttempts: 'attemptBoth',
-            });
+            let detectedText: string | null = null;
 
-            if (code && code.data) {
-              const scannedRaw = code.data.trim();
+            // Strategy 1: Native BarcodeDetector (GPU accelerated, instant Code 128 / QR Code on Chrome)
+            if (barcodeDetectorRef.current) {
+              try {
+                const barcodes = await barcodeDetectorRef.current.detect(canvas);
+                if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                  detectedText = barcodes[0].rawValue.trim();
+                }
+              } catch {}
+            }
+
+            // Strategy 2: jsQR for fast 2D QR decoding
+            if (!detectedText) {
+              const imgData = ctx.getImageData(0, 0, targetW, targetH);
+              const qr = jsQR(imgData.data, targetW, targetH, {
+                inversionAttempts: 'attemptBoth',
+              });
+              if (qr && qr.data) {
+                detectedText = qr.data.trim();
+              }
+            }
+
+            // Strategy 3: ZXing MultiFormatReader for 1D Barcodes (CODE128, CODE39, EAN13)
+            if (!detectedText && zxingReaderRef.current) {
+              try {
+                const zxResult = zxingReaderRef.current.decode(canvas as any);
+                if (zxResult && zxResult.getText()) {
+                  detectedText = zxResult.getText().trim();
+                }
+              } catch {}
+            }
+
+            if (detectedText) {
               const currentTime = Date.now();
-
-              // Smart throttle:
-              // If the exact same code was scanned, debounce 2.8 seconds to avoid double-triggers.
-              // If a DIFFERENT student is scanned, scan immediately with 0 delay!
-              const isSameCode = scannedRaw === lastScannedCodeRef.current;
-              const hasDebouncePassed = currentTime - lastScannedTimeRef.current > 2800;
+              const isSameCode = detectedText === lastScannedCodeRef.current;
+              const hasDebouncePassed = currentTime - lastScannedTimeRef.current > 2500;
 
               if (!isSameCode || hasDebouncePassed) {
-                lastScannedCodeRef.current = scannedRaw;
+                lastScannedCodeRef.current = detectedText;
                 lastScannedTimeRef.current = currentTime;
-                handleProcessCode(scannedRaw);
+                handleProcessCode(detectedText);
               }
             }
           }
@@ -642,6 +777,10 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     animationFrameIdRef.current = requestAnimationFrame(tick);
   }, [isScanning, handleProcessCode]);
 
+  useEffect(() => {
+    runDetectionLoopRef.current = runDetectionLoop;
+  }, [runDetectionLoop]);
+
   // Restart detection loop when isScanning changes
   useEffect(() => {
     if (isScanning) {
@@ -654,6 +793,21 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     };
   }, [isScanning, runDetectionLoop]);
 
+  // Auto-connect camera whenever mode switches to 'scanner'
+  useEffect(() => {
+    if (mode === 'scanner') {
+      const timer = setTimeout(() => {
+        startCamera();
+      }, 100);
+      return () => {
+        clearTimeout(timer);
+        stopCamera();
+      };
+    } else {
+      stopCamera();
+    }
+  }, [mode, startCamera, stopCamera]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -661,7 +815,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     };
   }, [stopCamera]);
 
-  // Handle Image File Upload QR Detection
+  // Handle Image File Upload Barcode & QR Detection
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -669,7 +823,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         const offCanvas = document.createElement('canvas');
         const offCtx = offCanvas.getContext('2d');
         if (!offCtx) return;
@@ -683,17 +837,52 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
         offCtx.drawImage(img, 0, 0, offCanvas.width, offCanvas.height);
         const imgData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
 
-        const code = jsQR(imgData.data, offCanvas.width, offCanvas.height, {
-          inversionAttempts: 'attemptBoth',
-        });
+        let detected: string | null = null;
 
-        if (code && code.data) {
-          handleProcessCode(code.data.trim());
+        // 1. Native BarcodeDetector
+        if (barcodeDetectorRef.current) {
+          try {
+            const results = await barcodeDetectorRef.current.detect(offCanvas);
+            if (results && results.length > 0 && results[0].rawValue) {
+              detected = results[0].rawValue.trim();
+            }
+          } catch {}
+        }
+
+        // 2. jsQR
+        if (!detected) {
+          const code = jsQR(imgData.data, offCanvas.width, offCanvas.height, {
+            inversionAttempts: 'attemptBoth',
+          });
+          if (code && code.data) {
+            detected = code.data.trim();
+          }
+        }
+
+        // 3. ZXing MultiFormatReader
+        if (!detected && zxingReaderRef.current) {
+          try {
+            const zxResult = await zxingReaderRef.current.decodeFromImageElement(img);
+            if (zxResult && zxResult.getText()) {
+              detected = zxResult.getText().trim();
+            }
+          } catch {
+            try {
+              const zxCanvasResult = zxingReaderRef.current.decode(offCanvas as any);
+              if (zxCanvasResult && zxCanvasResult.getText()) {
+                detected = zxCanvasResult.getText().trim();
+              }
+            } catch {}
+          }
+        }
+
+        if (detected) {
+          handleProcessCode(detected);
         } else {
           playErrorBuzzer();
           Swal.fire({
-            title: 'QR Code Tidak Terdeteksi',
-            text: 'Tidak dapat menemukan barcode/QR Code pada gambar yang diunggah. Pastikan gambar jelas dan tidak terpotong.',
+            title: 'Barcode / QR Tidak Terdeteksi',
+            text: 'Tidak dapat menemukan Barcode atau QR Code pada gambar yang diunggah. Pastikan barcode/QR kartu terlihat jelas dan tidak buram.',
             icon: 'warning',
             confirmButtonColor: '#059669',
           });
@@ -832,7 +1021,6 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
           <button
             onClick={() => {
               setMode('scanner');
-              startCamera();
             }}
             className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
               mode === 'scanner'
@@ -840,7 +1028,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            📷 Mode Pemindai QR Kamera
+            📷 Mode Pemindai Barcode &amp; QR Kamera
           </button>
         </div>
       </div>
@@ -1077,8 +1265,24 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                     isScanning ? 'opacity-100' : 'opacity-20'
                   }`}
                   playsInline
+                  autoPlay
                   muted
                 />
+
+                {/* Top Camera Information Overlay */}
+                {isScanning && (
+                  <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none z-20">
+                    <span className="px-3 py-1 bg-black/75 backdrop-blur-md rounded-full text-[10px] font-semibold text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-md">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span className="truncate max-w-[180px] sm:max-w-xs">
+                        {activeCameraLabel || (facingMode === 'environment' ? 'Kamera Belakang (HP)' : 'Webcam Depan (Laptop)')}
+                      </span>
+                    </span>
+                    <span className="px-2.5 py-1 bg-black/75 backdrop-blur-md rounded-full text-[10px] font-mono text-amber-300 border border-amber-400/30 font-bold shadow-md">
+                      Barcode 1D + QR 2D
+                    </span>
+                  </div>
+                )}
 
                 {/* Camera Inactive Placeholder */}
                 {!isScanning && (
@@ -1088,24 +1292,26 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                     </div>
                     <h4 className="text-base font-bold">Kamera Pemindai Sedang Nonaktif</h4>
                     <p className="text-xs text-slate-400 max-w-sm mt-1">
-                      Klik tombol &ldquo;Aktifkan Kamera&rdquo; untuk mulai memindai Kartu Pelajar QR secara otomatis.
+                      Klik tombol &ldquo;Aktifkan Kamera&rdquo; untuk mulai memindai Barcode (garis) atau QR Code Kartu Siswa.
                     </p>
-                    <button
-                      onClick={() => startCamera()}
-                      className="mt-4 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95 flex items-center gap-2"
-                    >
-                      <Camera className="w-4 h-4" />
-                      Aktifkan Kamera Sekarang
-                    </button>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        onClick={() => startCamera()}
+                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-900/40 transition-all active:scale-95 flex items-center gap-2"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Aktifkan Kamera Sekarang
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {/* Active Scanning HUD Overlay */}
                 {isScanning && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4">
-                    {/* Viewfinder Target Frame */}
+                    {/* Viewfinder Target Frame (wide enough for 1D barcodes and tall enough for 2D QR codes) */}
                     <div
-                      className={`w-64 h-64 sm:w-72 sm:h-72 border-2 rounded-3xl relative transition-all duration-300 ${
+                      className={`w-72 sm:w-80 h-52 sm:h-60 border-2 rounded-3xl relative transition-all duration-300 ${
                         isGreenFlash
                           ? 'border-emerald-300 scale-105 shadow-[0_0_60px_rgba(16,185,129,0.9)] bg-emerald-500/10'
                           : 'border-emerald-400/80 shadow-[0_0_35px_rgba(16,185,129,0.35)]'
@@ -1117,6 +1323,9 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                       <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-xl"></div>
                       <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-xl"></div>
 
+                      {/* Center alignment guide line */}
+                      <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 border-t border-dashed border-emerald-400/40"></div>
+
                       {/* Animated Laser Scanning Line */}
                       <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981] animate-pulse top-1/2 -translate-y-1/2"></div>
                     </div>
@@ -1124,7 +1333,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                     {/* HUD Status Pill */}
                     <div className="mt-5 px-4 py-1.5 bg-black/80 backdrop-blur-md rounded-full text-[11px] font-semibold text-emerald-400 border border-emerald-500/40 flex items-center gap-2 shadow-lg">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                      <span>{scanMessage || 'Arahkan QR Siswa ke Kotak Pindai'}</span>
+                      <span>{scanMessage || 'Posisikan Barcode atau QR Code Kartu Pelajar di dalam bingkai'}</span>
                     </div>
                   </div>
                 )}
@@ -1133,7 +1342,7 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                 <div className="absolute bottom-3 inset-x-3 flex items-center justify-between pointer-events-auto bg-black/60 backdrop-blur-md px-3.5 py-2 rounded-xl border border-white/10 text-white text-xs z-20">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/10 uppercase tracking-wider text-slate-300">
-                      {facingMode === 'environment' ? 'Belakang' : 'Depan / Webcam'}
+                      {facingMode === 'environment' ? 'Kamera Belakang (HP)' : 'Webcam Depan (Laptop)'}
                     </span>
                     {availableCameras.length > 1 && (
                       <span className="text-[10px] text-emerald-400 font-semibold hidden sm:inline">
@@ -1162,10 +1371,10 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
                     <button
                       onClick={flipCamera}
                       className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all flex items-center gap-1 text-[11px]"
-                      title="Ganti Kamera Depan/Belakang"
+                      title="Putar / Ganti Kamera Depan/Belakang"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Ganti Kamera</span>
+                      <span className="hidden sm:inline">Putar Kamera</span>
                     </button>
 
                     {/* Audio Sound Toggle */}
@@ -1183,35 +1392,68 @@ export const AbsensiManager: React.FC<AbsensiManagerProps> = ({ siswaList, absen
               </div>
 
               {/* Hardware Selection & Extra Control Bar */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-emerald-600" />
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">Pilih Perangkat:</span>
-                  <select
-                    value={selectedCameraId}
-                    onChange={(e) => {
-                      setSelectedCameraId(e.target.value);
-                      startCamera(e.target.value);
-                    }}
-                    className="px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 max-w-[200px]"
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                {/* Quick Camera Mode Switchers (HP vs Laptop) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 text-xs flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-emerald-600" />
+                    Kamera:
+                  </span>
+
+                  <button
+                    onClick={switchToBackCamera}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      facingMode === 'environment'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                    title="Aktifkan kamera belakang (Optimal untuk HP / Smartphone)"
                   >
-                    <option value="">Kamera Otomatis (Default)</option>
-                    {availableCameras.map((cam, idx) => (
-                      <option key={cam.deviceId || idx} value={cam.deviceId}>
-                        {cam.label || `Kamera ${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Kamera Belakang (HP)</span>
+                  </button>
+
+                  <button
+                    onClick={switchToFrontCamera}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                      facingMode === 'user'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                    title="Aktifkan kamera depan atau webcam laptop"
+                  >
+                    <Laptop className="w-3.5 h-3.5" />
+                    <span>Webcam Laptop</span>
+                  </button>
+
+                  {/* Device dropdown if multiple cameras */}
+                  {availableCameras.length > 0 && (
+                    <select
+                      value={selectedCameraId}
+                      onChange={(e) => {
+                        setSelectedCameraId(e.target.value);
+                        startCamera(e.target.value);
+                      }}
+                      className="px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200 max-w-[160px] truncate"
+                    >
+                      <option value="">Pilih Perangkat...</option>
+                      {availableCameras.map((cam, idx) => (
+                        <option key={cam.deviceId || idx} value={cam.deviceId}>
+                          {cam.label || `Kamera ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-semibold transition-all flex items-center gap-1.5"
                     title="Pindai gambar file kartu yang tersimpan"
                   >
                     <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                    Unggah Foto QR
+                    Unggah Foto Kartu
                   </button>
 
                   <button

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Lightbulb, Send, ArrowLeft, CheckCircle2, Lock, HelpCircle, Building2, Star, MessageSquareQuote } from 'lucide-react';
+import { Lightbulb, Send, ArrowLeft, CheckCircle2, Lock, HelpCircle, Building2, Star, MessageSquareQuote, ShieldCheck, Clock, Tag, UserCheck } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { Siswa, Pengaturan } from '../../types';
-import { addSaran } from '../../services/saranService';
+import { Siswa, Pengaturan, SaranMasukan } from '../../types';
+import { saranService } from '../../services/saranService';
 
 interface PortalSaranSiswaProps {
   siswaList: Siswa[];
@@ -20,6 +20,7 @@ export const PortalSaranSiswa: React.FC<PortalSaranSiswaProps> = ({ siswaList, p
   const [rating, setRating] = useState<number>(5);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submittedTicket, setSubmittedTicket] = useState<SaranMasukan | null>(null);
 
   // If student is selected from directory
   const handleStudentSelect = (nisn: string) => {
@@ -31,7 +32,7 @@ export const PortalSaranSiswa: React.FC<PortalSaranSiswaProps> = ({ siswaList, p
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!judul.trim() || !pesan.trim()) {
@@ -71,7 +72,7 @@ export const PortalSaranSiswa: React.FC<PortalSaranSiswaProps> = ({ siswaList, p
         finalNisn = '-';
       }
 
-      addSaran({
+      const saved = await saranService.submitSaran({
         tanggal,
         waktu,
         pengirimNama: finalNama,
@@ -84,23 +85,25 @@ export const PortalSaranSiswa: React.FC<PortalSaranSiswaProps> = ({ siswaList, p
         rating
       });
 
-      setSubmitting(false);
+      setSubmittedTicket(saved);
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error(err);
-      setSubmitting(false);
       Swal.fire({
         icon: 'error',
         title: 'Gagal Mengirim',
         text: 'Terjadi kesalahan saat mengirim saran. Silakan coba lagi.',
         confirmButtonColor: '#ef4444'
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const resetForm = () => {
     setSubmitted(false);
+    setSubmittedTicket(null);
     setJudul('');
     setPesan('');
     setRating(5);
@@ -148,26 +151,81 @@ export const PortalSaranSiswa: React.FC<PortalSaranSiswaProps> = ({ siswaList, p
 
         {/* Success State */}
         {submitted ? (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 text-center animate-fadeIn">
-            <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 p-8 sm:p-10 text-center animate-fadeIn max-w-2xl mx-auto">
+            <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner ring-8 ring-emerald-50 dark:ring-emerald-950/30">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Terima Kasih, Suara Anda Telah Terkirim!</h2>
-            <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-8 text-sm">
-              Saran dan masukan Anda sangat berharga bagi peningkatan fasilitas dan kualitas pelayanan di sekolah. Setiap masukan akan ditinjau secara berkala.
+            
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-xs font-bold mb-3">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              Terkoneksi Real-Time ke Server Sekolah
+            </span>
+
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">
+              Saran & Masukan Berhasil Terkirim!
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto mb-6 text-xs sm:text-sm leading-relaxed">
+              Terima kasih atas aspirasi Anda! Pesan Anda telah diteruskan langsung ke sistem monitoring manajemen sekolah dan guru secara instan.
             </p>
+
+            {/* Proof Ticket Voucher */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-dashed border-amber-300 dark:border-amber-700 p-5 text-left mb-8 shadow-xs">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Bukti Pengiriman Aspirasi Murid
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 text-[10px] font-black">
+                  STATUS: BARU DITERIMA
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Kode Registrasi:</span>
+                  <span className="font-mono font-bold text-amber-700 dark:text-amber-400 text-sm">
+                    #SRN-{submittedTicket?.id.replace('saran_', '').slice(-6).toUpperCase() || 'RESMI'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Waktu Pengiriman:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {submittedTicket?.tanggal} • {submittedTicket?.waktu} WIB
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Identitas Pengirim:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {submittedTicket?.isAnonymous ? '🔒 Anonim (Rahasia)' : `${submittedTicket?.pengirimNama} (${submittedTicket?.pengirimKelas})`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Kategori Masukan:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    {submittedTicket?.kategori}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                <span className="text-[10px] text-slate-400 block mb-0.5">Judul Aspirasi:</span>
+                <p className="font-bold text-slate-900 dark:text-white text-xs">
+                  {submittedTicket?.judul}
+                </p>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row justify-center gap-3">
               <button
                 onClick={resetForm}
-                className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-lg shadow-amber-500/25 transition-all"
+                className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs sm:text-sm shadow-lg shadow-amber-500/25 transition-all"
               >
-                Kirim Saran Lainnya
+                Kirim Saran / Aspirasi Lainnya
               </button>
               <a
                 href="/"
-                className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold transition-all"
+                className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm transition-all"
               >
-                Kembali ke Beranda
+                Kembali ke Beranda Utama
               </a>
             </div>
           </div>

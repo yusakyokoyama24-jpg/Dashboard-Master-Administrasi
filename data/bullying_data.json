@@ -1,0 +1,17 @@
+[
+  {
+    "id": "bully_001",
+    "tanggal": "2026-10-08",
+    "waktu": "10:15",
+    "isAnonymous": true,
+    "pelaporNama": "Anonim (Dirahasiakan)",
+    "pelaporKelas": "-",
+    "pelaporNisn": "-",
+    "jenisBullying": "Verbal",
+    "lokasiKejadian": "Kantin Sekolah",
+    "deskripsi": "Diejek dan dipanggil dengan nama orang tua di depan teman-teman lain saat jam istirahat.",
+    "pihakTerlibat": "Siswa kelas X (dirahasiakan)",
+    "status": "Menunggu Penanganan",
+    "createdAt": "2026-10-08T03:15:00.000Z"
+  }
+]

@@ -12,6 +12,7 @@ interface PortalPengaduanBullyingProps {
 export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = ({ siswaList, pengaturan }) => {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedReport, setSubmittedReport] = useState<any>(null);
 
   const [form, setForm] = useState({
     isAnonymous: true,
@@ -41,6 +42,20 @@ export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = (
     }
   };
 
+  const handleNameSelect = (name: string) => {
+    const found = siswaList.find((s) => s.nama.toLowerCase() === name.toLowerCase());
+    if (found) {
+      setForm((p) => ({
+        ...p,
+        pelaporNama: found.nama,
+        pelaporKelas: found.kelas || p.pelaporKelas,
+        pelaporNisn: found.nisn || p.pelaporNisn,
+      }));
+    } else {
+      setForm((p) => ({ ...p, pelaporNama: name }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.lokasiKejadian.trim() || !form.deskripsi.trim()) {
@@ -54,7 +69,7 @@ export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = (
       const tanggal = now.toISOString().split('T')[0];
       const waktu = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-      await bullyingService.submitReport({
+      const created = await bullyingService.submitReport({
         tanggal,
         waktu,
         isAnonymous: form.isAnonymous,
@@ -68,12 +83,13 @@ export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = (
         buktiFoto: form.buktiFoto || undefined,
       });
 
+      setSubmittedReport(created);
       setIsSubmitted(true);
       Swal.fire({
         icon: 'success',
-        title: 'Laporan Berhasil Terkirim',
-        text: 'Terima kasih telah bersuara. Laporan Anda bersifat rahasia dan akan segera ditindaklanjuti oleh Tim BK & Guru.',
-        timer: 4000,
+        title: 'Laporan Berhasil Terkirim!',
+        text: 'Laporan Anda sudah tersimpan di sistem sekolah dan masuk ke dashboard pemantauan guru BK.',
+        timer: 3500,
         showConfirmButton: false,
       });
     } catch (err: any) {
@@ -129,15 +145,44 @@ export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = (
               <CheckCircle2 className="w-10 h-10" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-xl font-black text-white">Laporan Anda Telah Diterima</h2>
+              <h2 className="text-xl font-black text-white">Laporan Anda Telah Masuk ke Sistem</h2>
               <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                Terima kasih atas keberanian Anda melaporkan kejadian ini. Laporan Anda bersifat konfidensial (rahasia) dan akan ditangani secara profesional oleh Tim BK serta Guru Pembimbing sekolah.
+                Terima kasih atas keberanian Anda melaporkan kejadian ini. Laporan Anda bersifat konfidensial (rahasia), telah tersimpan di server sekolah, dan otomatis tersinkronisasi ke Dashboard Guru BK.
               </p>
             </div>
-            <div className="pt-4">
+
+            {submittedReport && (
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 text-left max-w-md mx-auto space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-slate-400">Kode Laporan:</span>
+                  <span className="font-mono font-bold text-amber-400">#{submittedReport.id}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-slate-400">Status Laporan:</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[11px]">
+                    Menunggu Penanganan
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-slate-400">Jenis Perundungan:</span>
+                  <span className="font-bold text-rose-400">{submittedReport.jenisBullying}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-slate-400">Lokasi Kejadian:</span>
+                  <span className="font-medium text-slate-200">{submittedReport.lokasiKejadian}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Waktu Laporan:</span>
+                  <span className="text-slate-300">{submittedReport.tanggal} • {submittedReport.waktu} WIB</span>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4 flex items-center justify-center gap-3">
               <button
                 onClick={() => {
                   setIsSubmitted(false);
+                  setSubmittedReport(null);
                   setForm({
                     isAnonymous: true,
                     pelaporNama: '',
@@ -154,6 +199,12 @@ export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = (
               >
                 Kirim Pengaduan Lain
               </button>
+              <a
+                href={window.location.pathname}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors"
+              >
+                Kembali ke Beranda
+              </a>
             </div>
           </div>
         ) : (
@@ -185,11 +236,21 @@ export const PortalPengaduanBullying: React.FC<PortalPengaduanBullyingProps> = (
                   <input
                     type="text"
                     required={!form.isAnonymous}
-                    placeholder="Nama Anda"
+                    placeholder="Nama Anda atau pilih dari daftar"
+                    list="daftarSiswaPelapor"
                     value={form.pelaporNama}
-                    onChange={(e) => setForm((p) => ({ ...p, pelaporNama: e.target.value }))}
+                    onChange={(e) => handleNameSelect(e.target.value)}
                     className="w-full mt-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                   />
+                  {siswaList && siswaList.length > 0 && (
+                    <datalist id="daftarSiswaPelapor">
+                      {siswaList.map((s) => (
+                        <option key={s.id || s.nisn} value={s.nama}>
+                          {s.kelas ? `${s.nama} (${s.kelas})` : s.nama}
+                        </option>
+                      ))}
+                    </datalist>
+                  )}
                 </div>
                 <div>
                   <label className="font-bold text-slate-300">Kelas</label>
