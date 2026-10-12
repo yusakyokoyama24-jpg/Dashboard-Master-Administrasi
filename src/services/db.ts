@@ -757,6 +757,15 @@ export const dbService = {
     }
     localStorage.setItem(STORAGE_KEYS.ABSENSI, JSON.stringify(list));
     notifyListeners();
+
+    // Async push to server backend for real-time dashboard sync
+    try {
+      fetch('/api/absensi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item),
+      }).catch((err) => console.warn('Background sync absensi error:', err));
+    } catch {}
   },
 
   recordBatchAbsensi(items: Absensi[]) {
@@ -771,6 +780,15 @@ export const dbService = {
     });
     localStorage.setItem(STORAGE_KEYS.ABSENSI, JSON.stringify(list));
     notifyListeners();
+
+    // Async push batch to server backend
+    try {
+      fetch('/api/absensi/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      }).catch((err) => console.warn('Background sync batch absensi error:', err));
+    } catch {}
   },
 
   // Nilai

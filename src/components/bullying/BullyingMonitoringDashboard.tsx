@@ -19,6 +19,12 @@ import {
   Lock,
   UserCheck,
   Download,
+  AlertTriangle,
+  Volume2,
+  VolumeX,
+  PhoneCall,
+  Radio,
+  Zap,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import QRCode from 'qrcode';
@@ -37,6 +43,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   // Filters
   const [filterStatus, setFilterStatus] = useState<string>('semua');
   const [filterJenis, setFilterJenis] = useState<string>('semua');
+  const [filterUrgensi, setFilterUrgensi] = useState<string>('semua');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Modals
@@ -44,8 +51,12 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [selectedReportModal, setSelectedReportModal] = useState<BullyingReport | null>(null);
   const [teacherNoteInput, setTeacherNoteInput] = useState('');
+  const [tindakanInput, setTindakanInput] = useState('');
+  const [petugasBkInput, setPetugasBkInput] = useState('');
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSseConnected, setIsSseConnected] = useState<boolean>(false);
+  const [isSoundMuted, setIsSoundMuted] = useState<boolean>(false);
   const previousCountRef = React.useRef<number | null>(null);
 
   const currentHost = typeof window !== 'undefined' ? window.location.origin : '';
@@ -53,6 +64,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   const studentPortalUrl = `${currentHost}${currentPath}?portal=bullying`;
 
   const playNewReportSound = () => {
+    if (isSoundMuted) return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
@@ -85,10 +97,11 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
         Swal.fire({
           toast: true,
           position: 'top-end',
-          icon: 'info',
-          title: `🔔 Ada ${diff} pengaduan baru dari murid!`,
+          icon: 'warning',
+          title: `🚨 ${diff} Pengaduan Bullying Masuk Real-Time!`,
+          text: 'Data langsung masuk dari perangkat murid ke dashboard server.',
           showConfirmButton: false,
-          timer: 4500,
+          timer: 5000,
           timerProgressBar: true,
         });
       }
@@ -103,14 +116,47 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
 
   useEffect(() => {
     loadData(true);
-    QRCode.toDataURL(studentPortalUrl, { width: 320, margin: 2 })
+    QRCode.toDataURL(studentPortalUrl, { width: 360, margin: 2, color: { dark: '#991b1b', light: '#FFFFFF' } })
       .then((url) => setQrDataUrl(url))
       .catch((err) => console.warn('QR code gen err:', err));
 
-    // Polling interval every 5 seconds to ensure student reports appear in real-time
+    // Connect to Server-Sent Events (SSE) stream for instantaneous push
+    const unsubscribeSSE = bullyingService.subscribeRealtime((event) => {
+      setIsSseConnected(true);
+      if (event.type === 'NEW_REPORT' && event.record) {
+        const newRec = event.record;
+        setReports((prev) => {
+          const exists = prev.some((r) => r.id === newRec.id);
+          return exists ? prev : [newRec, ...prev];
+        });
+        setLastSyncTime(new Date());
+        playNewReportSound();
+
+        const isEmergency = newRec.tingkatUrgensi === 'Darurat / Butuh Pendampingan Cepat';
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: isEmergency ? 'error' : 'warning',
+          title: isEmergency ? '🚨 LAPORAN DARURAT MASUK DARI MURID!' : '🔔 Pengaduan Murid Masuk Real-Time!',
+          html: `<b>[${newRec.jenisBullying}]</b> di <i>${newRec.lokasiKejadian}</i>`,
+          showConfirmButton: false,
+          timer: 5500,
+          timerProgressBar: true,
+        });
+      } else if (event.type === 'UPDATE_REPORT' && event.record) {
+        const updated = event.record;
+        setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        setLastSyncTime(new Date());
+      } else if (event.type === 'DELETE_REPORT' && event.id) {
+        setReports((prev) => prev.filter((r) => r.id !== event.id));
+        setLastSyncTime(new Date());
+      }
+    });
+
+    // Dual-redundancy polling every 3.5 seconds
     const interval = setInterval(() => {
       loadData(false);
-    }, 5000);
+    }, 3500);
 
     const handleExternalChange = () => {
       loadData(false);
@@ -130,12 +176,13 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
     }
 
     return () => {
+      unsubscribeSSE();
       clearInterval(interval);
       window.removeEventListener('tongguru_bullying_data_changed', handleExternalChange);
       window.removeEventListener('storage', handleExternalChange);
       if (bc) bc.close();
     };
-  }, [studentPortalUrl]);
+  }, [studentPortalUrl, isSoundMuted]);
 
   // Copy link
   const handleCopyLink = () => {
@@ -179,12 +226,14 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   const filteredReports = reports.filter((r) => {
     if (filterStatus !== 'semua' && r.status !== filterStatus) return false;
     if (filterJenis !== 'semua' && r.jenisBullying !== filterJenis) return false;
+    if (filterUrgensi !== 'semua' && (r.tingkatUrgensi || 'Biasa') !== filterUrgensi) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchDesc = r.deskripsi.toLowerCase().includes(q);
       const matchLoc = r.lokasiKejadian.toLowerCase().includes(q);
       const matchName = (r.pelaporNama || '').toLowerCase().includes(q);
-      if (!matchDesc && !matchLoc && !matchName) return false;
+      const matchContact = (r.kontakPelapor || '').toLowerCase().includes(q);
+      if (!matchDesc && !matchLoc && !matchName && !matchContact) return false;
     }
     return true;
   });
@@ -194,6 +243,9 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   const pendingReports = reports.filter((r) => r.status === 'Menunggu Penanganan').length;
   const inProgressReports = reports.filter((r) => r.status === 'Sedang Ditindaklanjuti').length;
   const resolvedReports = reports.filter((r) => r.status === 'Selesai Ditangani').length;
+  const emergencyUnresolved = reports.filter(
+    (r) => r.tingkatUrgensi === 'Darurat / Butuh Pendampingan Cepat' && r.status !== 'Selesai Ditangani'
+  ).length;
 
   // Update Status & Note
   const handleUpdateStatus = async (id: string, newStatus: BullyingReport['status']) => {
@@ -208,11 +260,15 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
   };
 
   const handleSaveTeacherNote = async (id: string) => {
-    const updated = await bullyingService.updateReport(id, { catatanGuru: teacherNoteInput });
+    const updated = await bullyingService.updateReport(id, {
+      catatanGuru: teacherNoteInput,
+      tindakanGuru: tindakanInput,
+      petugasBk: petugasBkInput,
+    });
     if (updated) {
       setReports((prev) => prev.map((r) => (r.id === id ? updated : r)));
       setSelectedReportModal(updated);
-      Swal.fire({ icon: 'success', title: 'Catatan Penanganan Disimpan!', timer: 1500, showConfirmButton: false });
+      Swal.fire({ icon: 'success', title: 'Dokumentasi Penanganan Disimpan!', timer: 1500, showConfirmButton: false });
     }
   };
 
@@ -243,12 +299,16 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
       No: i + 1,
       Tanggal: r.tanggal,
       Waktu: r.waktu,
+      Urgensi: r.tingkatUrgensi || 'Biasa',
       Pelapor: r.pelaporNama || 'Anonim',
+      'Kontak Pelapor': r.kontakPelapor || '-',
       'Jenis Bullying': r.jenisBullying,
       'Lokasi Kejadian': r.lokasiKejadian,
       'Deskripsi Pengaduan': r.deskripsi,
       'Pihak Terlibat': r.pihakTerlibat || '-',
       Status: r.status,
+      'Petugas BK': r.petugasBk || '-',
+      'Tindakan Guru / BK': r.tindakanGuru || '-',
       'Catatan Guru / BK': r.catatanGuru || '-',
     }));
 
@@ -283,25 +343,37 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                 <span className="px-2.5 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black uppercase tracking-wider">
                   MODUL ANTI-BULLYING
                 </span>
-                <span className="px-2.5 py-0.5 rounded-md bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                <span className="px-2.5 py-0.5 rounded-md bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                  LIVE PORTAL
+                  {isSseConnected ? 'SERVER SSE LIVE PUSH' : 'REAL-TIME CONNECTED'}
                 </span>
                 <span className="px-2.5 py-0.5 rounded-md bg-emerald-400/20 text-emerald-200 border border-emerald-400/30 text-[10px] font-semibold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Sinkron Real-time ({lastSyncTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+                  Terakhir sinkron: {lastSyncTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight mt-1 text-white">
                 Pemantauan & Pengaduan Bullying (Perundungan)
               </h1>
               <p className="text-xs sm:text-sm text-rose-100 max-w-2xl">
-                Sistem pengaduan dan pemantauan interaktif bagi siswa untuk melaporkan kasus perundungan secara aman dan rahasia. Guru dapat meninjau, menangani, dan mendokumentasikan tindak lanjut.
+                Server pusat penerimaan laporan siswa secara real-time. Setiap laporan yang dikirimkan murid langsung masuk ke monitor dashboard ini seketika.
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsSoundMuted(!isSoundMuted)}
+              className={`p-2.5 rounded-xl border font-bold text-xs backdrop-blur-md transition-all flex items-center gap-1.5 ${
+                isSoundMuted
+                  ? 'bg-slate-800/80 text-slate-400 border-slate-700'
+                  : 'bg-white/20 text-white hover:bg-white/30 border-white/30'
+              }`}
+              title={isSoundMuted ? 'Suara notifikasi dibisukan' : 'Suara notifikasi aktif'}
+            >
+              {isSoundMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+              <span className="hidden sm:inline">{isSoundMuted ? 'Bisu' : 'Suara Aktif'}</span>
+            </button>
             <button
               onClick={() => loadData(false)}
               disabled={isRefreshing}
@@ -316,14 +388,14 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
               className="px-3.5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-2"
             >
               <Copy className="w-4 h-4" />
-              <span>Salin Tautan Portal Siswa</span>
+              <span>Salin Tautan Siswa</span>
             </button>
             <button
               onClick={() => setIsQrModalOpen(true)}
               className="px-3.5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs backdrop-blur-md border border-white/30 transition-all flex items-center gap-2"
             >
               <QrCode className="w-4 h-4" />
-              <span>Tampilkan QR</span>
+              <span>Cetak / Tampilkan QR</span>
             </button>
             <a
               href={`${currentPath}?portal=bullying`}
@@ -337,6 +409,35 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
           </div>
         </div>
       </div>
+
+      {/* EMERGENCY PRIORITY BANNER IF ANY */}
+      {emergencyUnresolved > 0 && (
+        <div className="no-print bg-rose-600 text-white p-4 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl border-2 border-rose-300 animate-pulse">
+          <div className="flex items-center gap-3">
+            <span className="p-2.5 bg-white text-rose-600 rounded-2xl font-black text-xs flex items-center gap-1.5 shadow-md">
+              <AlertTriangle className="w-4 h-4 text-rose-600" />
+              <span>KASUS DARURAT</span>
+            </span>
+            <div>
+              <h4 className="font-black text-sm">
+                Perhatian: Terdapat {emergencyUnresolved} Laporan Darurat yang Belum Selesai Ditangani!
+              </h4>
+              <p className="text-xs text-rose-100">
+                Siswa membutuhkan perlindungan atau intervensi cepat dari Guru BK & Tim Satgas Perlindungan Anak.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setFilterUrgensi('Darurat / Butuh Pendampingan Cepat');
+              setFilterStatus('semua');
+            }}
+            className="px-4 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-700 font-black text-xs shadow-md transition-all shrink-0"
+          >
+            Tampilkan Kasus Darurat ({emergencyUnresolved})
+          </button>
+        </div>
+      )}
 
       {/* SHAREABLE LINK BANNER */}
       <div className="no-print bg-white dark:bg-slate-900 border-2 border-rose-400 dark:border-rose-600 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
@@ -505,6 +606,20 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
             </select>
           </div>
 
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold text-slate-600 dark:text-slate-400">Urgensi:</span>
+            <select
+              value={filterUrgensi}
+              onChange={(e) => setFilterUrgensi(e.target.value)}
+              className="px-2 py-1 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-bold"
+            >
+              <option value="semua">Semua Tingkat</option>
+              <option value="Darurat / Butuh Pendampingan Cepat">🚨 Darurat (Bahaya)</option>
+              <option value="Penting">⚠️ Penting</option>
+              <option value="Biasa">Biasa</option>
+            </select>
+          </div>
+
           <button
             onClick={() => loadData(true)}
             className="ml-auto text-xs text-rose-600 hover:underline flex items-center gap-1"
@@ -520,7 +635,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wide">
-              Daftar Laporan Pengaduan Masuk
+              Daftar Laporan Pengaduan Masuk dari Murid
             </h2>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200 font-bold">
               {filteredReports.length} Laporan
@@ -534,10 +649,10 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
               <ShieldAlert className="w-8 h-8" />
             </div>
             <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              Belum ada laporan pengaduan bullying yang tercatat
+              Belum ada laporan pengaduan bullying yang sesuai filter
             </p>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Siswa dapat melaporkan insiden melalui tautan portal rahasia. Data pengaduan akan masuk secara real-time ke panel guru.
+              Siswa dapat melaporkan insiden melalui QR code portal murid. Data pengaduan otomatis masuk secara real-time ke panel guru ini.
             </p>
           </div>
         ) : (
@@ -546,7 +661,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
               <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   <th className="py-3 px-4">Waktu & Pelapor</th>
-                  <th className="py-3 px-3">Jenis Bullying</th>
+                  <th className="py-3 px-3">Urgensi & Kategori</th>
                   <th className="py-3 px-3">Lokasi Kejadian</th>
                   <th className="py-3 px-3">Deskripsi Pengaduan</th>
                   <th className="py-3 px-3 text-center">Status</th>
@@ -557,13 +672,13 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                 {filteredReports.map((item) => (
                   <tr key={item.id} className="hover:bg-rose-50/40 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div className="font-black text-slate-900 dark:text-white">
+                      <div className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
                         {item.isAnonymous ? (
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-[10px]">
                             🔒 Anonim (Rahasia)
                           </span>
                         ) : (
-                          item.pelaporNama
+                          <span>{item.pelaporNama}</span>
                         )}
                       </div>
                       <div className="text-[10px] text-slate-500 mt-0.5">
@@ -574,10 +689,32 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                           Kelas: {item.pelaporKelas}
                         </div>
                       )}
+                      {item.kontakPelapor && (
+                        <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
+                          <PhoneCall className="w-3 h-3" />
+                          <span>{item.kontakPelapor}</span>
+                        </div>
+                      )}
                     </td>
 
-                    <td className="py-3.5 px-3">
-                      <span className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-black text-[10px] border border-rose-300">
+                    <td className="py-3.5 px-3 space-y-1">
+                      <div>
+                        {item.tingkatUrgensi === 'Darurat / Butuh Pendampingan Cepat' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white font-black text-[9px] uppercase shadow-xs animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                            DARURAT
+                          </span>
+                        ) : item.tingkatUrgensi === 'Penting' ? (
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold text-[9px] uppercase">
+                            PENTING
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[9px]">
+                            Biasa
+                          </span>
+                        )}
+                      </div>
+                      <span className="inline-block px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-black text-[10px] border border-rose-300">
                         {item.jenisBullying}
                       </span>
                     </td>
@@ -590,9 +727,14 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                       <p className="text-slate-700 dark:text-slate-300 line-clamp-2">
                         {item.deskripsi}
                       </p>
+                      {item.tindakanGuru && (
+                        <div className="mt-1 text-[10px] text-blue-600 dark:text-blue-400 font-bold">
+                          ✓ Tindakan: {item.tindakanGuru}
+                        </div>
+                      )}
                       {item.catatanGuru && (
-                        <div className="mt-1 text-[10px] text-emerald-600 font-bold">
-                          ✓ Tindak Lanjut: {item.catatanGuru}
+                        <div className="mt-0.5 text-[10px] text-emerald-600 font-bold">
+                          ✓ Catatan: {item.catatanGuru}
                         </div>
                       )}
                     </td>
@@ -613,12 +755,27 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
 
                     <td className="no-print py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {item.kontakPelapor && (
+                          <a
+                            href={`https://wa.me/${item.kontakPelapor.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                              `Halo, kami dari Tim Bimbingan Konseling (BK) ${pengaturan.namaSekolah}. Kami telah menerima laporan pengaduan Anda (#${item.id}) dan ingin mendampingi Anda secara rahasia.`
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-xs"
+                            title="Hubungi Pelapor via WhatsApp Rahasia"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </a>
+                        )}
                         <button
                           onClick={() => {
                             setSelectedReportModal(item);
                             setTeacherNoteInput(item.catatanGuru || '');
+                            setTindakanInput(item.tindakanGuru || '');
+                            setPetugasBkInput(item.petugasBk || pengaturan.namaGuru || '');
                           }}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1"
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1 shadow-xs"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Detail</span>
@@ -660,7 +817,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                 Scan QR Code Pengaduan Bullying
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                Siswa dapat melakukan scan QR code ini untuk melaporkan perundungan secara rahasia dan aman.
+                Siswa dapat melakukan scan QR code ini untuk melaporkan perundungan secara rahasia dan aman langsung dari HP mereka.
               </p>
             </div>
 
@@ -718,7 +875,7 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
               <div>
                 <span className="text-slate-400 block">Pelapor:</span>
                 <span className="font-bold text-white">
@@ -730,14 +887,50 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
                 <span className="font-mono text-white">{selectedReportModal.tanggal} {selectedReportModal.waktu} WIB</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Jenis Perundungan:</span>
+                <span className="text-slate-400 block">Tingkat Urgensi:</span>
+                <span className={`font-black ${
+                  selectedReportModal.tingkatUrgensi === 'Darurat / Butuh Pendampingan Cepat'
+                    ? 'text-rose-400'
+                    : selectedReportModal.tingkatUrgensi === 'Penting'
+                    ? 'text-amber-400'
+                    : 'text-slate-300'
+                }`}>
+                  {selectedReportModal.tingkatUrgensi || 'Biasa'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Jenis Bullying:</span>
                 <span className="font-bold text-rose-400">{selectedReportModal.jenisBullying}</span>
               </div>
               <div>
                 <span className="text-slate-400 block">Lokasi:</span>
                 <span className="font-bold text-white">{selectedReportModal.lokasiKejadian}</span>
               </div>
+              <div>
+                <span className="text-slate-400 block">Status:</span>
+                <span className="font-bold text-amber-300">{selectedReportModal.status}</span>
+              </div>
             </div>
+
+            {selectedReportModal.kontakPelapor && (
+              <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Kontak Pelapor / Konseling Rahasia:</span>
+                  <span className="font-mono font-bold text-emerald-400">{selectedReportModal.kontakPelapor}</span>
+                </div>
+                <a
+                  href={`https://wa.me/${selectedReportModal.kontakPelapor.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                    `Halo, kami dari Tim Bimbingan Konseling (BK) ${pengaturan.namaSekolah}. Kami menindaklanjuti laporan #${selectedReportModal.id} secara rahasia.`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>Chat WhatsApp</span>
+                </a>
+              </div>
+            )}
 
             <div className="space-y-1 text-xs">
               <span className="text-slate-400 font-bold block">Kronologi / Deskripsi Kejadian:</span>
@@ -784,22 +977,49 @@ export const BullyingMonitoringDashboard: React.FC<BullyingMonitoringDashboardPr
               </div>
             </div>
 
-            {/* Teacher Notes */}
-            <div className="space-y-1 text-xs pt-2">
-              <label className="text-slate-400 font-bold block">Catatan & Tindak Lanjut Guru / BK:</label>
-              <textarea
-                rows={3}
-                placeholder="Tuliskan tindakan yang telah diambil (misal: Pemanggilan konseling, mediasi siswa, pembinaan)..."
-                value={teacherNoteInput}
-                onChange={(e) => setTeacherNoteInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white"
-              />
+            {/* Tindakan Guru / BK */}
+            <div className="space-y-3 text-xs pt-2 border-t border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">Petugas BK / Penanggung Jawab:</label>
+                  <input
+                    type="text"
+                    placeholder="Nama Guru BK / Wali Kelas"
+                    value={petugasBkInput}
+                    onChange={(e) => setPetugasBkInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 font-bold block mb-1">Langkah / Tindakan Mediasi:</label>
+                  <input
+                    type="text"
+                    placeholder="Misal: Pemanggilan saksi, konseling individu, mediasi"
+                    value={tindakanInput}
+                    onChange={(e) => setTindakanInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-400 font-bold block mb-1">Catatan Evaluasi & Penanganan Lanjutan (Rahasia):</label>
+                <textarea
+                  rows={3}
+                  placeholder="Catatan perkembangan mental korban, sanksi pembinaan pelaku, serta jadwal pemantauan lanjutan..."
+                  value={teacherNoteInput}
+                  onChange={(e) => setTeacherNoteInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white"
+                />
+              </div>
+
               <div className="flex justify-end pt-1">
                 <button
                   onClick={() => handleSaveTeacherNote(selectedReportModal.id)}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
                 >
-                  Simpan Catatan Guru
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Simpan Dokumentasi Penanganan</span>
                 </button>
               </div>
             </div>

@@ -218,12 +218,16 @@ export interface BullyingReport {
   pelaporNisn?: string;
   isAnonymous: boolean;
   jenisBullying: 'Fisik' | 'Verbal' | 'Siber (Cyberbullying)' | 'Sosial / Pengucilan' | 'Intimidasi / Ancaman' | 'Lainnya';
+  tingkatUrgensi?: 'Biasa' | 'Penting' | 'Darurat / Butuh Pendampingan Cepat';
   lokasiKejadian: string;
   deskripsi: string;
   pihakTerlibat?: string;
   buktiFoto?: string;
+  kontakPelapor?: string;
   status: 'Menunggu Penanganan' | 'Sedang Ditindaklanjuti' | 'Selesai Ditangani';
   catatanGuru?: string;
+  tindakanGuru?: string;
+  petugasBk?: string;
   createdAt: string;
 }
 

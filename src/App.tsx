@@ -63,6 +63,7 @@ import { PortalPengaduanBullying } from './components/bullying/PortalPengaduanBu
 import { BullyingMonitoringDashboard } from './components/bullying/BullyingMonitoringDashboard';
 import { PortalSaranSiswa } from './components/saran/PortalSaranSiswa';
 import { SaranMonitoringDashboard } from './components/saran/SaranMonitoringDashboard';
+import { PortalPresensiSiswa } from './components/academic/PortalPresensiSiswa';
 
 // AI Suite Components
 import { ModulAjarGenerator } from './components/ai/ModulAjarGenerator';
@@ -171,6 +172,11 @@ export default function App() {
   const isPortalSaran = typeof window !== 'undefined' && window.location.search.includes('portal=saran');
   if (isPortalSaran) {
     return <PortalSaranSiswa siswaList={siswaList} pengaturan={pengaturan} />;
+  }
+
+  const isPortalPresensi = typeof window !== 'undefined' && window.location.search.includes('portal=presensi');
+  if (isPortalPresensi) {
+    return <PortalPresensiSiswa siswaList={siswaList} pengaturan={pengaturan} />;
   }
 
   // If not logged in, show Login Screen

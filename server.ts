@@ -758,7 +758,275 @@ app.post('/api/pkl/places', (req: Request, res: Response) => {
 
   data.places.push(newPlace);
   writePklData(data);
-  res.status(201).json({ success: true, place: newPlace });
+  res.json({ success: true, place: newPlace });
+});
+
+// ==========================================
+// 7.5. PRESENSI DIGITAL SISWA (ABSENSI KBM & KELAS) API
+// ==========================================
+const ABSENSI_DATA_FILE = path.join(process.cwd(), 'data', 'absensi_data.json');
+
+interface AbsensiItem {
+  id: string;
+  tanggal: string; // YYYY-MM-DD
+  siswaId: string;
+  namaSiswa: string;
+  kelas: string;
+  status: 'H' | 'S' | 'I' | 'A';
+  catatan?: string;
+  timestamp: string;
+  userId: string;
+  source?: 'scanner_kamera' | 'barcode_gun' | 'manual_guru' | 'mandiri_hp';
+  buktiFoto?: string;
+  lokasiGps?: string;
+  createdAt?: string;
+}
+
+const DEFAULT_ABSENSI_DATA: AbsensiItem[] = [
+  {
+    id: 'ab_seed_001',
+    tanggal: new Date().toISOString().split('T')[0],
+    siswaId: 's_001',
+    namaSiswa: 'Ahmad Faiz Al-Ghifari',
+    kelas: 'X RPL 1',
+    status: 'H',
+    catatan: 'Hadir via Pemindai Barcode Kamera',
+    timestamp: new Date().toISOString(),
+    userId: 'master_guru_default',
+    source: 'scanner_kamera',
+  },
+  {
+    id: 'ab_seed_002',
+    tanggal: new Date().toISOString().split('T')[0],
+    siswaId: 's_002',
+    namaSiswa: 'Anindya Putri Maharani',
+    kelas: 'X RPL 1',
+    status: 'H',
+    catatan: 'Hadir via Scan Barcode Kartu Siswa',
+    timestamp: new Date().toISOString(),
+    userId: 'master_guru_default',
+    source: 'scanner_kamera',
+  },
+];
+
+const absensiStreamClients = new Set<Response>();
+
+function broadcastAbsensiUpdate(payload: { type: string; record?: AbsensiItem; items?: AbsensiItem[]; id?: string }) {
+  const data = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of Array.from(absensiStreamClients)) {
+    try {
+      client.write(data);
+    } catch {
+      absensiStreamClients.delete(client);
+    }
+  }
+}
+
+function readAbsensiData(): AbsensiItem[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(ABSENSI_DATA_FILE)) {
+      const content = fs.readFileSync(ABSENSI_DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    fs.writeFileSync(ABSENSI_DATA_FILE, JSON.stringify(DEFAULT_ABSENSI_DATA, null, 2), 'utf-8');
+    return DEFAULT_ABSENSI_DATA;
+  } catch (err) {
+    console.warn('Gagal membaca absensi_data.json, memakai default:', err);
+    return DEFAULT_ABSENSI_DATA;
+  }
+}
+
+function writeAbsensiData(data: AbsensiItem[]): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(ABSENSI_DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Gagal menulis absensi_data.json:', err);
+    return false;
+  }
+}
+
+// GET /api/absensi/stream (Server-Sent Events for instant Real-Time push to dashboard)
+app.get('/api/absensi/stream', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  res.write(': connected to absensi realtime server stream\n\n');
+  absensiStreamClients.add(res);
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      clearInterval(heartbeat);
+      absensiStreamClients.delete(res);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    absensiStreamClients.delete(res);
+  });
+});
+
+// GET /api/absensi (Fetch attendances with optional filtering)
+app.get('/api/absensi', (req: Request, res: Response) => {
+  const list = readAbsensiData();
+  const { tanggal, kelas, siswaId } = req.query;
+
+  let filtered = [...list];
+  if (tanggal && typeof tanggal === 'string') {
+    filtered = filtered.filter((a) => a.tanggal === tanggal);
+  }
+  if (kelas && typeof kelas === 'string' && kelas !== 'all') {
+    filtered = filtered.filter((a) => a.kelas === kelas);
+  }
+  if (siswaId && typeof siswaId === 'string') {
+    filtered = filtered.filter((a) => a.siswaId === siswaId);
+  }
+
+  // Sort newest first
+  filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  res.json(filtered);
+});
+
+// POST /api/absensi (Single record creation / scan)
+app.post('/api/absensi', (req: Request, res: Response) => {
+  const body = req.body || {};
+  if (!body.siswaId || !body.namaSiswa) {
+    return res.status(400).json({ error: 'Data siswaId dan namaSiswa wajib diisi' });
+  }
+
+  const list = readAbsensiData();
+  const todayStr = new Date().toISOString().split('T')[0];
+  const targetDate = body.tanggal || todayStr;
+
+  const newItem: AbsensiItem = {
+    id: body.id || `ab_${body.siswaId}_${Date.now()}`,
+    tanggal: targetDate,
+    siswaId: body.siswaId,
+    namaSiswa: body.namaSiswa,
+    kelas: body.kelas || 'X RPL 1',
+    status: body.status || 'H',
+    catatan: body.catatan || `Hadir (${new Date().toLocaleTimeString('id-ID', { hour12: false })} WIB)`,
+    timestamp: body.timestamp || new Date().toISOString(),
+    userId: body.userId || 'master_guru_default',
+    source: body.source || 'scanner_kamera',
+    buktiFoto: body.buktiFoto,
+    lokasiGps: body.lokasiGps,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Upsert for same student on same date
+  const existingIdx = list.findIndex(
+    (item) => item.siswaId === newItem.siswaId && item.tanggal === newItem.tanggal
+  );
+
+  let isUpdated = false;
+  if (existingIdx !== -1) {
+    list[existingIdx] = { ...list[existingIdx], ...newItem };
+    isUpdated = true;
+  } else {
+    list.unshift(newItem);
+  }
+
+  writeAbsensiData(list);
+  const finalRecord = isUpdated ? list[existingIdx] : newItem;
+
+  // Broadcast to all connected dashboards in real-time
+  broadcastAbsensiUpdate({
+    type: isUpdated ? 'UPDATE_ABSENSI' : 'NEW_ABSENSI',
+    record: finalRecord,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: isUpdated ? 'Data presensi berhasil diperbarui' : 'Data presensi berhasil dicatat secara real-time',
+    record: finalRecord,
+    isUpdated,
+  });
+});
+
+// POST /api/absensi/batch (Batch save from manual checklist)
+app.post('/api/absensi/batch', (req: Request, res: Response) => {
+  const { items } = req.body || {};
+  if (!Array.isArray(items)) {
+    return res.status(400).json({ error: 'items array is required' });
+  }
+
+  const list = readAbsensiData();
+  const savedItems: AbsensiItem[] = [];
+
+  for (const raw of items) {
+    if (!raw.siswaId || !raw.namaSiswa) continue;
+    const targetDate = raw.tanggal || new Date().toISOString().split('T')[0];
+    const rec: AbsensiItem = {
+      id: raw.id || `ab_${raw.siswaId}_${targetDate}`,
+      tanggal: targetDate,
+      siswaId: raw.siswaId,
+      namaSiswa: raw.namaSiswa,
+      kelas: raw.kelas || '',
+      status: raw.status || 'H',
+      catatan: raw.catatan || '',
+      timestamp: raw.timestamp || new Date().toISOString(),
+      userId: raw.userId || 'master_guru_default',
+      source: raw.source || 'manual_guru',
+      createdAt: new Date().toISOString(),
+    };
+
+    const idx = list.findIndex((a) => a.siswaId === rec.siswaId && a.tanggal === rec.tanggal);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...rec };
+      savedItems.push(list[idx]);
+    } else {
+      list.unshift(rec);
+      savedItems.push(rec);
+    }
+  }
+
+  writeAbsensiData(list);
+  broadcastAbsensiUpdate({
+    type: 'BATCH_ABSENSI',
+    items: savedItems,
+  });
+
+  res.json({
+    success: true,
+    message: `${savedItems.length} data presensi berhasil disimpan ke server`,
+    count: savedItems.length,
+  });
+});
+
+// DELETE /api/absensi/:id
+app.delete('/api/absensi/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const list = readAbsensiData();
+
+  const index = list.findIndex((a) => a.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Data absensi tidak ditemukan' });
+  }
+
+  list.splice(index, 1);
+  writeAbsensiData(list);
+
+  broadcastAbsensiUpdate({
+    type: 'DELETE_ABSENSI',
+    id,
+  });
+
+  res.json({ success: true, message: 'Data absensi berhasil dihapus' });
 });
 
 // ==========================================
@@ -775,12 +1043,16 @@ interface BullyingItem {
   pelaporNisn?: string;
   isAnonymous: boolean;
   jenisBullying: 'Fisik' | 'Verbal' | 'Siber (Cyberbullying)' | 'Sosial / Pengucilan' | 'Intimidasi / Ancaman' | 'Lainnya';
+  tingkatUrgensi?: 'Biasa' | 'Penting' | 'Darurat / Butuh Pendampingan Cepat';
   lokasiKejadian: string;
   deskripsi: string;
   pihakTerlibat?: string;
   buktiFoto?: string;
+  kontakPelapor?: string;
   status: 'Menunggu Penanganan' | 'Sedang Ditindaklanjuti' | 'Selesai Ditangani';
   catatanGuru?: string;
+  tindakanGuru?: string;
+  petugasBk?: string;
   createdAt: string;
 }
 
@@ -794,6 +1066,7 @@ const DEFAULT_BULLYING_DATA: BullyingItem[] = [
     pelaporKelas: '-',
     pelaporNisn: '-',
     jenisBullying: 'Verbal',
+    tingkatUrgensi: 'Penting',
     lokasiKejadian: 'Kantin Sekolah',
     deskripsi: 'Diejek dan dipanggil dengan nama orang tua di depan teman-teman lain saat jam istirahat.',
     pihakTerlibat: 'Siswa kelas X (dirahasiakan)',
@@ -801,6 +1074,20 @@ const DEFAULT_BULLYING_DATA: BullyingItem[] = [
     createdAt: new Date().toISOString(),
   },
 ];
+
+// SSE Real-Time Clients set for Bullying Reports
+const bullyingStreamClients = new Set<Response>();
+
+function broadcastBullyingUpdate(payload: { type: string; record?: BullyingItem; id?: string }) {
+  const data = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of Array.from(bullyingStreamClients)) {
+    try {
+      client.write(data);
+    } catch {
+      bullyingStreamClients.delete(client);
+    }
+  }
+}
 
 function readBullyingData(): BullyingItem[] {
   try {
@@ -835,6 +1122,33 @@ function writeBullyingData(data: BullyingItem[]): boolean {
   }
 }
 
+// GET /api/bullying/stream (Server-Sent Events for instant Real-Time push)
+app.get('/api/bullying/stream', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  // Send initial handshake
+  res.write(': connected to bullying realtime server stream\n\n');
+  bullyingStreamClients.add(res);
+
+  // Send periodic ping heartbeat every 15 seconds to keep connection alive through proxies
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      clearInterval(heartbeat);
+      bullyingStreamClients.delete(res);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    bullyingStreamClients.delete(res);
+  });
+});
+
 // GET /api/bullying
 app.get('/api/bullying', (_req: Request, res: Response) => {
   const reports = readBullyingData();
@@ -863,18 +1177,30 @@ app.post('/api/bullying', (req: Request, res: Response) => {
     pelaporKelas: body.isAnonymous ? '-' : (body.pelaporKelas || '-'),
     pelaporNisn: body.isAnonymous ? '-' : (body.pelaporNisn || '-'),
     jenisBullying: body.jenisBullying || 'Verbal',
+    tingkatUrgensi: body.tingkatUrgensi || 'Biasa',
     lokasiKejadian: body.lokasiKejadian.trim(),
     deskripsi: body.deskripsi.trim(),
     pihakTerlibat: body.pihakTerlibat || '',
     buktiFoto: body.buktiFoto || undefined,
+    kontakPelapor: body.kontakPelapor || undefined,
     status: (body.status as any) || 'Menunggu Penanganan',
     catatanGuru: body.catatanGuru || '',
+    tindakanGuru: body.tindakanGuru || '',
+    petugasBk: body.petugasBk || '',
     createdAt: body.createdAt || now.toISOString(),
   };
 
   reports.unshift(newReport);
   writeBullyingData(reports);
-  res.status(201).json({ success: true, record: newReport, message: 'Laporan pengaduan berhasil tersimpan di sistem' });
+
+  // Broadcast to all connected teacher dashboards in real-time
+  broadcastBullyingUpdate({ type: 'NEW_REPORT', record: newReport });
+
+  res.status(201).json({
+    success: true,
+    record: newReport,
+    message: 'Laporan pengaduan berhasil tersimpan di sistem dan terkirim ke server guru BK'
+  });
 });
 
 // PUT /api/bullying/:id
@@ -895,6 +1221,10 @@ app.put('/api/bullying/:id', (req: Request, res: Response) => {
   };
 
   writeBullyingData(reports);
+
+  // Broadcast update to all connected dashboards
+  broadcastBullyingUpdate({ type: 'UPDATE_REPORT', record: reports[index] });
+
   res.json({ success: true, record: reports[index], message: 'Status laporan berhasil diperbarui' });
 });
 
@@ -910,6 +1240,10 @@ app.delete('/api/bullying/:id', (req: Request, res: Response) => {
 
   reports.splice(index, 1);
   writeBullyingData(reports);
+
+  // Broadcast delete to all connected dashboards
+  broadcastBullyingUpdate({ type: 'DELETE_REPORT', id });
+
   res.json({ success: true, message: 'Laporan pengaduan berhasil dihapus' });
 });
 
@@ -1706,3 +2040,4 @@ async function startServer() {
 startServer().catch((err) => {
   console.error('[Tongguru] Failed to start server:', err);
 });
+

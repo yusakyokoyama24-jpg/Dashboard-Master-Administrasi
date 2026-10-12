@@ -47,11 +47,17 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
   const [qrCodeUrls, setQrCodeUrls] = useState<Record<string, string>>({});
   const [bullyingQrUrl, setBullyingQrUrl] = useState<string>('');
   const [saranQrUrl, setSaranQrUrl] = useState<string>('');
+  const [presensiQrUrl, setPresensiQrUrl] = useState<string>('');
 
   useEffect(() => {
     const origin = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
     const bullyingUrl = origin + '?portal=bullying';
     const saranUrl = origin + '?portal=saran';
+    const presensiUrl = origin + '?portal=presensi';
+
+    QRCode.toDataURL(presensiUrl, { width: 280, margin: 1, color: { dark: '#065f46', light: '#FFFFFF' } })
+      .then((url) => setPresensiQrUrl(url))
+      .catch((e) => console.error(e));
 
     QRCode.toDataURL(bullyingUrl, { width: 280, margin: 1, color: { dark: '#991b1b', light: '#FFFFFF' } })
       .then((url) => setBullyingQrUrl(url))
@@ -787,6 +793,11 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
                               </div>
                             )}
                           </div>
+                          {qrCodeUrls[previewSiswa.id] && (
+                            <div className="bg-white p-0.5 rounded border border-slate-300 shadow-2xs">
+                              <img src={qrCodeUrls[previewSiswa.id]} alt="QR NISN" className="w-14 h-14" />
+                            </div>
+                          )}
                         </div>
                         <div className="col-span-8 text-left space-y-1">
                           <div>
@@ -838,35 +849,44 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
 
                       {/* Content */}
                       <div className="p-3 grid grid-cols-12 gap-2 items-center">
-                        {/* High-res 2 QR Codes (Bullying & Saran) */}
-                        <div className="col-span-6 grid grid-cols-2 gap-2 items-center justify-center">
+                        {/* High-res 3 QR Codes (Presensi, Bullying & Saran) */}
+                        <div className="col-span-7 grid grid-cols-3 gap-1.5 items-center justify-center">
+                          <div className="flex flex-col items-center">
+                            {presensiQrUrl ? (
+                              <img src={presensiQrUrl} alt="QR Presensi" className="w-14 h-14 rounded border-2 border-emerald-500 p-0.5 bg-white shadow-xs" />
+                            ) : (
+                              <div className="w-14 h-14 bg-slate-200 animate-pulse rounded"></div>
+                            )}
+                            <span className="text-[7.5px] font-black text-emerald-800 mt-1 uppercase">Presensi QR</span>
+                          </div>
                           <div className="flex flex-col items-center">
                             {bullyingQrUrl ? (
-                              <img src={bullyingQrUrl} alt="QR Bullying" className="w-16 h-16 rounded border border-rose-400 p-0.5 bg-white shadow-xs" />
+                              <img src={bullyingQrUrl} alt="QR Bullying" className="w-14 h-14 rounded border border-rose-400 p-0.5 bg-white shadow-xs" />
                             ) : (
-                              <div className="w-16 h-16 bg-slate-200 animate-pulse rounded"></div>
+                              <div className="w-14 h-14 bg-slate-200 animate-pulse rounded"></div>
                             )}
-                            <span className="text-[8px] font-bold text-rose-700 mt-1">Aduan Bully</span>
+                            <span className="text-[7.5px] font-bold text-rose-700 mt-1 uppercase">Aduan Bully</span>
                           </div>
                           <div className="flex flex-col items-center">
                             {saranQrUrl ? (
-                              <img src={saranQrUrl} alt="QR Saran" className="w-16 h-16 rounded border border-amber-400 p-0.5 bg-white shadow-xs" />
+                              <img src={saranQrUrl} alt="QR Saran" className="w-14 h-14 rounded border border-amber-400 p-0.5 bg-white shadow-xs" />
                             ) : (
-                              <div className="w-16 h-16 bg-slate-200 animate-pulse rounded"></div>
+                              <div className="w-14 h-14 bg-slate-200 animate-pulse rounded"></div>
                             )}
-                            <span className="text-[8px] font-bold text-amber-700 mt-1">Saran Sekolah</span>
+                            <span className="text-[7.5px] font-bold text-amber-700 mt-1 uppercase">Saran Sekolah</span>
                           </div>
                         </div>
 
                         {/* Rules and Authorization */}
-                        <div className="col-span-6 text-left space-y-1">
-                          <p className="text-[8px] text-slate-600 dark:text-slate-300 leading-tight">
-                            <b>Scan QR Belakang untuk:</b><br />
-                            • Pengaduan Bullying (Rahasia &amp; Aman)<br />
-                            • Kotak Saran &amp; Masukan Sekolah
+                        <div className="col-span-5 text-left space-y-1">
+                          <p className="text-[7.5px] text-slate-600 dark:text-slate-300 leading-tight">
+                            <b>Scan Kamera HP:</b><br />
+                            • <b className="text-emerald-700">Presensi Masuk</b><br />
+                            • Pengaduan Bully Aman<br />
+                            • Kotak Saran Digital
                           </p>
 
-                          <div className="pt-1 border-t border-slate-200 text-[8px] text-slate-500">
+                          <div className="pt-1 border-t border-slate-200 text-[7.5px] text-slate-500">
                             <span>{pengaturan.kota}, Kepala Sekolah</span>
                             <p className="font-bold text-slate-800 dark:text-slate-200">
                               {pengaturan.namaKepsek.split(',')[0]}
@@ -876,7 +896,7 @@ export const KartuSiswaView: React.FC<KartuSiswaViewProps> = ({
                       </div>
 
                       <div className="bg-slate-100 px-2.5 py-1 border-t border-slate-200 text-center text-[8px] text-slate-500">
-                        Kartu Resmi Pelajar • Terhubung ke Portal Digital Sekolah
+                        Kartu Resmi Pelajar • Terhubung ke Portal Real-Time Dashboard Guru
                       </div>
                     </div>
                   </div>

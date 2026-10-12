@@ -31,6 +31,48 @@ export const bullyingService = {
     }
   },
 
+  // Real-Time Server-Sent Events (SSE) Stream listener
+  subscribeRealtime(onEvent: (event: { type: string; record?: BullyingReport; id?: string }) => void): () => void {
+    let es: EventSource | null = null;
+    try {
+      if (typeof window !== 'undefined' && typeof EventSource !== 'undefined') {
+        es = new EventSource('/api/bullying/stream');
+        es.onmessage = (ev) => {
+          try {
+            if (!ev.data || ev.data.trim() === '') return;
+            const data = JSON.parse(ev.data);
+            if (data && data.type) {
+              onEvent(data);
+            }
+          } catch (e) {
+            console.debug('SSE parse comment/ping:', e);
+          }
+        };
+        es.onerror = () => {
+          // EventSource will automatically attempt reconnection
+        };
+      }
+    } catch (err) {
+      console.warn('Real-time SSE not supported or blocked:', err);
+    }
+
+    return () => {
+      if (es) {
+        es.close();
+      }
+    };
+  },
+
+  // Check if server is reachable from student device / dashboard
+  async checkServerConnection(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/bullying', { method: 'GET', cache: 'no-store' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
   async fetchReports(): Promise<BullyingReport[]> {
     try {
       const res = await fetch('/api/bullying');
